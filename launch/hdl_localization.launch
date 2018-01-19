@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- arguments -->
+  <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
+
+  <!-- in case you use velodyne_driver, comment out the following line -->
+  <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
+
+    <!-- globalmap_server_nodelet -->
+    <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
+      <param name="globalmap_pcd" value="$(find hdl_localization)/data/map.pcd" />
+      <param name="downsample_resolution" value="0.1" />
+    </node>
+
+    <!-- hdl_localization_nodelet -->
+    <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="load hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+        <!-- imu settings -->
+        <!-- during "cool_time", imu inputs are ignored -->
+        <param name="use_imu" value="true" />
+        <param name="invert_imu" value="true" />
+        <param name="cool_time_duration" value="2.0" />
+        <!-- ndt settings -->
+        <param name="ndt_neighbor_search_method" value="DIRECT7" />
+        <param name="ndt_resolution" value="1.0" />
+        <param name="downsample_resolution" value="0.1" />
+        <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
+        <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
+        <param name="specify_init_pose" value="true" />
+        <param name="init_pos_x" value="0.0" />
+        <param name="init_pos_y" value="0.0" />
+        <param name="init_pos_z" value="0.0" />
+        <param name="init_ori_w" value="1.0" />
+        <param name="init_ori_x" value="0.0" />
+        <param name="init_ori_y" value="0.0" />
+        <param name="init_ori_z" value="0.0" />
+    </node>
+</launch>

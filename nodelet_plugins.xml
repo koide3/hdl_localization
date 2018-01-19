@@ -1,0 +1,7 @@
+<library path="lib/libhdl_localization_nodelet">
+<class name="hdl_localization/HdlLocalizationNodelet" type="hdl_localization::HdlLocalizationNodelet" base_class_type="nodelet::Nodelet" />
+</library>
+
+<library path="lib/libglobalmap_server_nodelet">
+<class name="hdl_localization/GlobalmapServerNodelet" type="hdl_localization::GlobalmapServerNodelet" base_class_type="nodelet::Nodelet" />
+</library>
