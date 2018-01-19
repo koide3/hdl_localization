@@ -1,6 +1,8 @@
 # hdl_localization
 ***hdl_localization*** is a ROS package for real-time 3D localization using a 3D LIDAR, such as velodyne HDL32e and VLP16. This package performs Unscented Kalman Filter-based pose estimation. It first estimates the sensor pose from IMU data implemented on the LIDAR, and then performs multi-threaded NDT scan matching between a globalmap point cloud and input point clouds to correct the estimated pose. IMU-based pose prediction is optional. If you disable it, the system predicts the sensor pose with the constant velocity model without imu information.
 
+[![hdl_localization](http://img.youtube.com/vi/NpUKZntIZTs/0.jpg)](http://www.youtube.com/watch?v=NpUKZntIZTs)
+
 ## Requirements
 ***hdl_localization*** requires the following libraries:
 - OpenMP
