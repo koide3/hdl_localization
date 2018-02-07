@@ -39,6 +39,8 @@ rosbag play --clock hdl_400.bag
 
 <img src="data/figs/localization1.png" height="256pix" /> <img src="data/figs/localization2.png" height="256pix" /> 
 
+If it doesn't work well, change *ndt_neighbor_search_method* in *hdl_localization.launch* to "DIRECT1". It makes the processing significantly fast, but a little bit unstable.
+
 ## Papers
 Kenji Koide, Jun Miura, and Emanuele Menegatti, A Portable 3D LIDAR-based System for Long-term and Wide-area People Behavior Measurement, IEEE Transactions on Human-Machine Systems (under review) [PDF].
 
