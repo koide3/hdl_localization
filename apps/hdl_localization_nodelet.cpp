@@ -162,7 +162,7 @@ private:
 
     processing_time.push_back((t2 - t1).toSec());
     double avg_processing_time = std::accumulate(processing_time.begin(), processing_time.end(), 0.0) / processing_time.size();
-    NODELET_INFO_STREAM("processing_time: " << avg_processing_time * 1000.0 << "[msec]");
+    // NODELET_INFO_STREAM("processing_time: " << avg_processing_time * 1000.0 << "[msec]");
 
     if(aligned_pub.getNumSubscribers()) {
       aligned->header.frame_id = "map";
