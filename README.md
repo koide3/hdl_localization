@@ -25,7 +25,7 @@ Example bag files (recorded in an outdoor environment): RE
 
 ```bash
 rosparam set use_sim_time true
-roslaunch hdl_localizatrion hdl_localizatrion.launch
+roslaunch hdl_localization hdl_localization.launch
 ```
 
 ```bash
