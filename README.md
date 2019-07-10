@@ -29,8 +29,8 @@ roslaunch hdl_localization hdl_localization.launch
 ```
 
 ```bash
-roscd hdl_localizatrion/rviz
-rviz -d hdl_localizatrion.rviz
+roscd hdl_localization/rviz
+rviz -d hdl_localization.rviz
 ```
 
 ```bash
