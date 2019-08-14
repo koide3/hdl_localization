@@ -101,7 +101,7 @@ public:
     Eigen::Vector3f p = trans.block<3, 1>(0, 3);
     Eigen::Quaternionf q(trans.block<3, 3>(0, 0));
 
-    if(quat().vec().dot(q.vec()) < 0.0f) {
+    if(quat().coeffs().dot(q.coeffs()) < 0.0f) {
       q.coeffs() *= -1.0f;
     }
 
