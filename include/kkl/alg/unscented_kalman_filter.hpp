@@ -92,7 +92,7 @@ public:
       mean_pred += weights[i] * sigma_points.row(i);
     }
     for (int i = 0; i < S; i++) {
-      VectorXt diff = sigma_points.row(i).transpose() - mean;
+      VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
       cov_pred += weights[i] * diff * diff.transpose();
     }
     cov_pred += R;
