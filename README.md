@@ -43,6 +43,7 @@ If it doesn't work well, change *ndt_neighbor_search_method* in *hdl_localizatio
 
 ## Related packages
 
+- [interactive_slam](https://github.com/koide3/interactive_slam)
 - <a href="https://github.com/koide3/hdl_graph_slam">hdl_graph_slam</a>
 - <a href="https://github.com/koide3/hdl_localization">hdl_localization</a>
 - <a href="https://github.com/koide3/hdl_people_tracking">hdl_people_tracking</a>
