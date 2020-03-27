@@ -2,6 +2,9 @@
 <launch>
   <!-- arguments -->
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
+  <arg name="points_topic" default="/velodyne_points" />
+  <arg name="imu_topic" default="/gpsimu_driver/imu_data" />
+  <arg name="odom_child_frame_id" default="velodyne" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
@@ -14,6 +17,10 @@
 
     <!-- hdl_localization_nodelet -->
     <node pkg="nodelet" type="nodelet" name="hdl_localization_nodelet" args="load hdl_localization/HdlLocalizationNodelet $(arg nodelet_manager)">
+        <remap from="/velodyne_points" to="$(arg points_topic)" />
+        <remap from="/gpsimu_driver/imu_data" to="$(arg imu_topic)" />
+        <!-- odometry frame_id -->
+        <param name="odom_child_frame_id" value="$(arg odom_child_frame_id)" />
         <!-- imu settings -->
         <!-- during "cool_time", imu inputs are ignored -->
         <param name="use_imu" value="true" />
