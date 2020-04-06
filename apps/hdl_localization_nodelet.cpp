@@ -5,6 +5,7 @@
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
+#include <pcl_ros/transforms.h>
 #include <tf_conversions/tf_eigen.h>
 #include <tf/transform_broadcaster.h>
 
@@ -42,6 +43,8 @@ public:
 
     processing_time.resize(16);
     initialize_params();
+    
+    odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
 
     use_imu = private_nh.param<bool>("use_imu", true);
     invert_imu = private_nh.param<bool>("invert_imu", false);
@@ -127,13 +130,20 @@ private:
     }
 
     const auto& stamp = points_msg->header.stamp;
-    pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
-    pcl::fromROSMsg(*points_msg, *cloud);
+    pcl::PointCloud<PointT>::Ptr pcl_cloud(new pcl::PointCloud<PointT>());
+    pcl::fromROSMsg(*points_msg, *pcl_cloud);
 
-    if(cloud->empty()) {
+    if(pcl_cloud->empty()) {
       NODELET_ERROR("cloud is empty!!");
       return;
     }
+
+    // transform pointcloud into odom_child_frame_id  
+    pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());  
+    if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_listener)) {
+        NODELET_ERROR("point cloud cannot be transformed into target frame!!");
+        return;
+    } 
 
     auto filtered = downsample(cloud);
 
@@ -230,7 +240,7 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
-    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, "map", "velodyne");
+    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, "map", odom_child_frame_id);
     pose_broadcaster.sendTransform(odom_trans);
 
     // publish the transform
@@ -243,7 +253,7 @@ private:
     odom.pose.pose.position.z = pose(2, 3);
     odom.pose.pose.orientation = odom_trans.transform.rotation;
 
-    odom.child_frame_id = "velodyne";
+    odom.child_frame_id = odom_child_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
     odom.twist.twist.angular.z = 0.0;
@@ -286,6 +296,8 @@ private:
   ros::NodeHandle nh;
   ros::NodeHandle mt_nh;
   ros::NodeHandle private_nh;
+  
+  std::string odom_child_frame_id;
 
   bool use_imu;
   bool invert_imu;
@@ -297,6 +309,7 @@ private:
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
   tf::TransformBroadcaster pose_broadcaster;
+  tf::TransformListener tf_listener;
 
   // imu input buffer
   std::mutex imu_data_mutex;
