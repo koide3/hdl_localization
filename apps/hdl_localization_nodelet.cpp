@@ -20,6 +20,7 @@
 #include <pcl/filters/voxel_grid.h>
 
 #include <pclomp/ndt_omp.h>
+#include <pclomp/gicp_omp.h>
 
 #include <hdl_localization/pose_estimator.hpp>
 
@@ -72,15 +73,23 @@ private:
     downsample_filter = voxelgrid;
 
     pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+    pclomp::GeneralizedIterativeClosestPoint<PointT, PointT>::Ptr gicp(new pclomp::GeneralizedIterativeClosestPoint<PointT, PointT>());
+
     ndt->setTransformationEpsilon(0.01);
     ndt->setResolution(ndt_resolution);
     if(ndt_neighbor_search_method == "DIRECT1") {
       NODELET_INFO("search_method DIRECT1 is selected");
       ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
+      registration = ndt;
     } else if(ndt_neighbor_search_method == "DIRECT7") {
       NODELET_INFO("search_method DIRECT7 is selected");
       ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
-    } else {
+      registration = ndt;
+    } else if(ndt_neighbor_search_method == "GICP_OMP"){
+      NODELET_INFO("search_method GICP_OMP is selected");
+      registration = gicp;
+    }
+     else {
       if(ndt_neighbor_search_method == "KDTREE") {
         NODELET_INFO("search_method KDTREE is selected");
       } else {
@@ -88,8 +97,9 @@ private:
         NODELET_WARN("default method is selected (KDTREE)");
       }
       ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
+      registration = ndt;
     }
-    registration = ndt;
+    
 
     // initialize pose estimator
     if(private_nh.param<bool>("specify_init_pose", true)) {
