@@ -54,7 +54,7 @@ private:
     globalmap->header.frame_id = "map";
 
     std::ifstream utm_file(globalmap_pcd + ".utm");
-    if (utm_file.is_open()) {
+    if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true)) {
       double utm_easting;
       double utm_northing;
       double altitude;
