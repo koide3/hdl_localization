@@ -42,7 +42,7 @@ public:
 
     // publish globalmap with "latched" publisher
     globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
-    timer_ = nh.createWallTimer(ros::WallDuration(0.05), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
+    globalmap_pub_timer = nh.createWallTimer(ros::WallDuration(0.05), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
   }
 
 private:
@@ -77,7 +77,7 @@ private:
 
   ros::Publisher globalmap_pub;
 
-  ros::WallTimer timer_;
+  ros::WallTimer globalmap_pub_timer;
   pcl::PointCloud<PointT>::Ptr globalmap;
 };
 
