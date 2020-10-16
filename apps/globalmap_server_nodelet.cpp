@@ -53,6 +53,19 @@ private:
     pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
     globalmap->header.frame_id = "map";
 
+    std::ifstream utm_file(globalmap_pcd + ".utm");
+    if (utm_file.is_open() && private_nh.param<bool>("convert_utm_to_local", true)) {
+      double utm_easting;
+      double utm_northing;
+      double altitude;
+      utm_file >> utm_easting >> utm_northing >> altitude;
+      for(auto& pt : globalmap->points) {
+        pt.getVector3fMap() -= Eigen::Vector3f(utm_easting, utm_northing, altitude);
+      }
+      ROS_INFO_STREAM("Global map offset by UTM reference coordinates (x = " 
+                      << utm_easting << ", y = " << utm_northing << ") and altitude (z = " << altitude << ")");
+    }
+
     // downsample globalmap
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
