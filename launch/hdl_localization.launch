@@ -4,7 +4,7 @@
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="points_topic" default="/velodyne_points" />
   <arg name="imu_topic" default="/gpsimu_driver/imu_data" />
-  <arg name="odom_child_frame_id" default="velodyne" />
+  <arg name="odom_child_frame_id" default="base_link" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
