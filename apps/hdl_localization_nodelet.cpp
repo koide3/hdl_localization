@@ -329,6 +329,12 @@ private:
     status.prediction_labels.reserve(2);
     status.prediction_errors.reserve(2);
 
+    if(pose_estimator->wo_prediction_error()) {
+      status.prediction_labels.push_back(std_msgs::String());
+      status.prediction_labels.back().data = "without_pred";
+      status.prediction_errors.push_back(matrix2pose(pose_estimator->wo_prediction_error().get()));
+    }
+
     if(pose_estimator->imu_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = "imu";

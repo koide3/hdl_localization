@@ -35,6 +35,10 @@ public:
       registration(registration),
       cool_time_duration(cool_time_duration)
   {
+    last_observation = Eigen::Matrix4f::Identity();
+    last_observation.block<3, 3>(0, 0) = quat.toRotationMatrix();
+    last_observation.block<3, 1>(0, 3) = pos;
+
     process_noise = Eigen::MatrixXf::Identity(16, 16);
     process_noise.middleRows(0, 3) *= 1.0;
     process_noise.middleRows(3, 3) *= 1.0;
@@ -123,6 +127,7 @@ public:
   pcl::PointCloud<PointT>::Ptr correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud) {
     last_correction_stamp = stamp;
 
+    Eigen::Matrix4f no_guess = last_observation;
     Eigen::Matrix4f imu_guess;
     Eigen::Matrix4f odom_guess;
     Eigen::Matrix4f init_guess = Eigen::Matrix4f::Identity();
@@ -171,6 +176,9 @@ public:
     Eigen::VectorXf observation(7);
     observation.middleRows(0, 3) = p;
     observation.middleRows(3, 4) = Eigen::Vector4f(q.w(), q.x(), q.y(), q.z());
+    last_observation = trans;
+
+    wo_pred_error = no_guess.inverse() * registration->getFinalTransformation();
 
     ukf->correct(observation);
     imu_pred_error = imu_guess.inverse() * registration->getFinalTransformation();
@@ -222,6 +230,10 @@ public:
     return m;
   }
 
+  const boost::optional<Eigen::Matrix4f>& wo_prediction_error() const {
+    return wo_pred_error;
+  }
+
   const boost::optional<Eigen::Matrix4f>& imu_prediction_error() const {
     return imu_pred_error;
   }
@@ -240,6 +252,8 @@ private:
   std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, PoseSystem>> ukf;
   std::unique_ptr<kkl::alg::UnscentedKalmanFilterX<float, OdomSystem>> odom_ukf;
 
+  Eigen::Matrix4f last_observation;
+  boost::optional<Eigen::Matrix4f> wo_pred_error;
   boost::optional<Eigen::Matrix4f> imu_pred_error;
   boost::optional<Eigen::Matrix4f> odom_pred_error;
 
