@@ -3,8 +3,12 @@
   <!-- arguments -->
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="points_topic" default="/velodyne_points" />
-  <arg name="imu_topic" default="/gpsimu_driver/imu_data" />
   <arg name="odom_child_frame_id" default="velodyne" />
+
+  <!-- optional arguments -->
+  <arg name="imu_topic" default="/gpsimu_driver/imu_data" />
+  <arg name="enable_robot_odometry_prediction" value="false" />
+  <arg name="robot_odom_frame_id" value="robot_odom" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
@@ -28,8 +32,8 @@
       <param name="invert_imu" value="true" />
       <param name="cool_time_duration" value="2.0" />
       <!-- robot odometry-based prediction -->
-      <param name="enable_robot_odometry_prediction" value="true" />
-      <param name="robot_odom_frame_id" value="robot_odom" />
+      <param name="enable_robot_odometry_prediction" value="$(arg enable_robot_odometry_prediction)" />
+      <param name="robot_odom_frame_id" value="$(arg robot_odom_frame_id)" />
       <!-- ndt settings -->
       <!-- if NDT is slow for your PC, try DIRECT1 serach method, which is a bit unstable but extremely fast -->
       <param name="ndt_neighbor_search_method" value="DIRECT7" />
