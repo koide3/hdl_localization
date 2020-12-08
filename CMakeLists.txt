@@ -19,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   sensor_msgs
+  geometry_msgs
+  message_generation
   ndt_omp
 )
 
@@ -36,6 +38,14 @@ if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 endif()
+
+########################
+## message generation ##
+########################
+add_message_files(FILES
+  ScanMatchingStatus.msg
+)
+generate_messages(DEPENDENCIES std_msgs geometry_msgs)
 
 ###################################
 ## catkin specific configuration ##
@@ -61,6 +71,8 @@ target_link_libraries(hdl_localization_nodelet
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+add_dependencies(hdl_localization_nodelet ${PROJECT_NAME}_gencpp)
+
 
 add_library(globalmap_server_nodelet apps/globalmap_server_nodelet.cpp)
 target_link_libraries(globalmap_server_nodelet
