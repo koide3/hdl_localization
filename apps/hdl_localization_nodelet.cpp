@@ -23,7 +23,7 @@
 #include <pclomp/gicp_omp.h>
 
 #include <hdl_localization/pose_estimator.hpp>
-
+#include <hdl_localization/ScanMatchingStatus.h>
 
 namespace hdl_localization {
 
@@ -44,7 +44,8 @@ public:
 
     processing_time.resize(16);
     initialize_params();
-    
+
+    robot_odom_frame_id = private_nh.param<std::string>("robot_odom_frame_id", "robot_odom");
     odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
 
     use_imu = private_nh.param<bool>("use_imu", true);
@@ -59,6 +60,7 @@ public:
 
     pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
+    status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
   }
 
 private:
@@ -89,7 +91,7 @@ private:
       NODELET_INFO("search_method GICP_OMP is selected");
       registration = gicp;
     }
-     else {
+    else {
       if(ndt_neighbor_search_method == "KDTREE") {
         NODELET_INFO("search_method KDTREE is selected");
       } else {
@@ -99,7 +101,7 @@ private:
       ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
       registration = ndt;
     }
-    
+
 
     // initialize pose estimator
     if(private_nh.param<bool>("specify_init_pose", true)) {
@@ -148,12 +150,12 @@ private:
       return;
     }
 
-    // transform pointcloud into odom_child_frame_id  
-    pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());  
+    // transform pointcloud into odom_child_frame_id
+    pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
     if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_listener)) {
         NODELET_ERROR("point cloud cannot be transformed into target frame!!");
         return;
-    } 
+    }
 
     auto filtered = downsample(cloud);
 
@@ -175,9 +177,33 @@ private:
       imu_data.erase(imu_data.begin(), imu_iter);
     }
 
+    // odometry-based prediction
+    ros::Time last_correction_time = pose_estimator->last_correction_time();
+    if(private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero()) {
+      tf::StampedTransform transform;
+      if(tf_listener.waitForTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, last_correction_time, robot_odom_frame_id, ros::Duration(0))) {
+        tf_listener.lookupTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, last_correction_time, robot_odom_frame_id, transform);
+      } else if(tf_listener.waitForTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, last_correction_time, robot_odom_frame_id, ros::Duration(0))) {
+        tf_listener.lookupTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, last_correction_time, robot_odom_frame_id, transform);
+      }
+
+      if(transform.stamp_.isZero()) {
+        NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
+      } else {
+        const auto& origin = transform.getOrigin();
+        const auto& rotation = transform.getRotation();
+
+        Eigen::Matrix4f delta = Eigen::Matrix4f::Identity();
+        delta.block<3, 3>(0, 0) = Eigen::Quaternionf(rotation.w(), rotation.x(), rotation.y(), rotation.z()).toRotationMatrix();
+        delta.block<3, 1>(0, 3) = Eigen::Vector3f(origin.x(), origin.y(), origin.z());
+
+        pose_estimator->predict_odom(delta);
+      }
+    }
+
     // correct
     auto t1 = ros::WallTime::now();
-    auto aligned = pose_estimator->correct(filtered);
+    auto aligned = pose_estimator->correct(stamp, filtered);
     auto t2 = ros::WallTime::now();
 
     processing_time.push_back((t2 - t1).toSec());
@@ -188,6 +214,10 @@ private:
       aligned->header.frame_id = "map";
       aligned->header.stamp = cloud->header.stamp;
       aligned_pub.publish(aligned);
+    }
+
+    if(status_pub.getNumSubscribers()) {
+      publish_scan_matching_status(points_msg->header, aligned);
     }
 
     publish_odometry(points_msg->header.stamp, pose_estimator->matrix());
@@ -272,7 +302,56 @@ private:
   }
 
   /**
-   * @brief convert a Eigen::Matrix to TransformedStamped
+   * @brief publish scan matching status information
+   */
+  void publish_scan_matching_status(const std_msgs::Header& header, pcl::PointCloud<pcl::PointXYZI>::ConstPtr aligned) {
+    ScanMatchingStatus status;
+    status.header = header;
+
+    status.has_converged = registration->hasConverged();
+    status.matching_error = registration->getFitnessScore();
+
+    const double max_correspondence_dist = 0.5;
+
+    int num_inliers = 0;
+    std::vector<int> k_indices;
+    std::vector<float> k_sq_dists;
+    for(int i = 0; i < aligned->size(); i++) {
+      const auto& pt = aligned->at(i);
+      registration->getSearchMethodTarget()->nearestKSearch(pt, 1, k_indices, k_sq_dists);
+      if(k_sq_dists[0] < max_correspondence_dist * max_correspondence_dist) {
+        num_inliers++;
+      }
+    }
+    status.inlier_fraction = static_cast<float>(num_inliers) / aligned->size();
+    status.relative_pose = matrix2pose(registration->getFinalTransformation());
+
+    status.prediction_labels.reserve(2);
+    status.prediction_errors.reserve(2);
+
+    if(pose_estimator->wo_prediction_error()) {
+      status.prediction_labels.push_back(std_msgs::String());
+      status.prediction_labels.back().data = "without_pred";
+      status.prediction_errors.push_back(matrix2pose(pose_estimator->wo_prediction_error().get()));
+    }
+
+    if(pose_estimator->imu_prediction_error()) {
+      status.prediction_labels.push_back(std_msgs::String());
+      status.prediction_labels.back().data = "imu";
+      status.prediction_errors.push_back(matrix2pose(pose_estimator->imu_prediction_error().get()));
+    }
+
+    if(pose_estimator->odom_prediction_error()) {
+      status.prediction_labels.push_back(std_msgs::String());
+      status.prediction_labels.back().data = "odom";
+      status.prediction_errors.push_back(matrix2pose(pose_estimator->odom_prediction_error().get()));
+    }
+
+    status_pub.publish(status);
+  }
+
+  /**
+   * @brief convert an Eigen::Matrix to TransformedStamped
    * @param stamp           timestamp
    * @param pose            pose matrix
    * @param frame_id        frame_id
@@ -301,12 +380,33 @@ private:
     return odom_trans;
   }
 
+  /**
+   * @brief convert an Eigen::Matrix to geometry_msgs::Pose
+   */
+  geometry_msgs::Pose matrix2pose(const Eigen::Matrix4f& mat) {
+    Eigen::Quaternionf quat(mat.block<3, 3>(0, 0));
+    Eigen::Vector3f trans = mat.block<3, 1>(0, 3);
+
+    geometry_msgs::Pose pose;
+    pose.position.x = trans.x();
+    pose.position.y = trans.y();
+    pose.position.z = trans.z();
+
+    pose.orientation.w = quat.w();
+    pose.orientation.x = quat.x();
+    pose.orientation.y = quat.y();
+    pose.orientation.z = quat.z();
+
+    return pose;
+  }
+
 private:
   // ROS
   ros::NodeHandle nh;
   ros::NodeHandle mt_nh;
   ros::NodeHandle private_nh;
-  
+
+  std::string robot_odom_frame_id;
   std::string odom_child_frame_id;
 
   bool use_imu;
@@ -318,6 +418,7 @@ private:
 
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
+  ros::Publisher status_pub;
   tf::TransformBroadcaster pose_broadcaster;
   tf::TransformListener tf_listener;
 

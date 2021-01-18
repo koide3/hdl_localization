@@ -7,20 +7,12 @@
 #include <tf_conversions/tf_eigen.h>
 #include <tf/transform_broadcaster.h>
 
-#include <nav_msgs/Odometry.h>
-#include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
 
 #include <pcl/filters/voxel_grid.h>
-
-#include <pclomp/ndt_omp.h>
-
-#include <hdl_localization/pose_estimator.hpp>
-
 
 namespace hdl_localization {
 
@@ -62,7 +54,7 @@ private:
       for(auto& pt : globalmap->points) {
         pt.getVector3fMap() -= Eigen::Vector3f(utm_easting, utm_northing, altitude);
       }
-      ROS_INFO_STREAM("Global map offset by UTM reference coordinates (x = " 
+      ROS_INFO_STREAM("Global map offset by UTM reference coordinates (x = "
                       << utm_easting << ", y = " << utm_northing << ") and altitude (z = " << altitude << ")");
     }
 
