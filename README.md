@@ -13,10 +13,14 @@ Video:<br>
 The following ros packages are required:
 - pcl_ros
 - <a href="https://github.com/koide3/ndt_omp">ndt_omp</a>
+- <a href="https://github.com/koide3/hdl_global_localization">hdl_global_localization</a>
 
 ## Parameters
 All parameters are listed in *launch/hdl_localization.launch* as ros params.<br>
 You can specify the initial sensor pose using "2D Pose Estimate" on rviz, or using ros params (see example launch file).
+
+## Services
+- ```/relocalize``` (std_srvs::Empty) : Perform global localization to relocalize the sensor position
 
 ## Example
 
@@ -37,7 +41,7 @@ rviz -d hdl_localization.rviz
 rosbag play --clock hdl_400.bag
 ```
 
-<img src="data/figs/localization1.png" height="256pix" /> <img src="data/figs/localization2.png" height="256pix" /> 
+<img src="data/figs/localization1.png" height="256pix" /> <img src="data/figs/localization2.png" height="256pix" />
 
 If it doesn't work well, change *ndt_neighbor_search_method* in *hdl_localization.launch* to "DIRECT1". It makes the scan matching significantly fast, but a little bit unstable.
 
@@ -55,7 +59,7 @@ Kenji Koide, Jun Miura, and Emanuele Menegatti, A Portable 3D LIDAR-based System
 ## Contact
 Kenji Koide, k.koide@aist.go.jp
 
-Active Intelligent Systems Laboratory, Toyohashi University of Technology, Japan [\[URL\]](http://www.aisl.cs.tut.ac.jp)  
+Active Intelligent Systems Laboratory, Toyohashi University of Technology, Japan [\[URL\]](http://www.aisl.cs.tut.ac.jp)
 Robot Innovation Research Center, National Institute of Advanced Industrial Science and Technology, Japan  [\[URL\]](https://unit.aist.go.jp/rirc/en/team/smart_mobility.html)
 
 
