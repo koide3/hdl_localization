@@ -18,9 +18,13 @@
 #include <pluginlib/class_list_macros.h>
 
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/approximate_voxel_grid.h>
 
 #include <pclomp/ndt_omp.h>
 #include <pclomp/gicp_omp.h>
+#include <fast_gicp/gicp/fast_gicp.hpp>
+#include <fast_gicp/gicp/fast_vgicp.hpp>
+#include <fast_gicp/gicp/fast_vgicp_cuda.hpp>
 
 #include <hdl_localization/pose_estimator.hpp>
 #include <hdl_localization/ScanMatchingStatus.h>
@@ -31,8 +35,7 @@ class HdlLocalizationNodelet : public nodelet::Nodelet {
 public:
   using PointT = pcl::PointXYZI;
 
-  HdlLocalizationNodelet() {
-  }
+  HdlLocalizationNodelet() {}
   virtual ~HdlLocalizationNodelet() {
   }
 
@@ -55,7 +58,7 @@ public:
       imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
     }
     points_sub = mt_nh.subscribe("/velodyne_points", 5, &HdlLocalizationNodelet::points_callback, this);
-    globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
+    globalmap_sub = nh.subscribe("/globalmap", 2, &HdlLocalizationNodelet::globalmap_callback, this);
     initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
 
     pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
@@ -67,41 +70,89 @@ private:
   void initialize_params() {
     // intialize scan matching method
     double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
-    std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
+    std::string reg_method = private_nh.param<std::string>("reg_method", "NDT_OMP");
+    double voxel_resolution = private_nh.param<double>("voxel_resolution", 1.0);
+    double voxel_search_radius = private_nh.param<double>("voxel_search_radius", 3.0);
+    std::string neighbor_search_method = private_nh.param<std::string>("neighbor_search_method", "DIRECT7");
+    std::string covariance_estimation_method = private_nh.param<std::string>("covariance_estimation_method", "GPU_RBF_KERNEL");
 
-    double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
     boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     downsample_filter = voxelgrid;
 
-    pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
     pclomp::GeneralizedIterativeClosestPoint<PointT, PointT>::Ptr gicp(new pclomp::GeneralizedIterativeClosestPoint<PointT, PointT>());
 
-    ndt->setTransformationEpsilon(0.01);
-    ndt->setResolution(ndt_resolution);
-    if(ndt_neighbor_search_method == "DIRECT1") {
-      NODELET_INFO("search_method DIRECT1 is selected");
-      ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
-      registration = ndt;
-    } else if(ndt_neighbor_search_method == "DIRECT7") {
-      NODELET_INFO("search_method DIRECT7 is selected");
-      ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
-      registration = ndt;
-    } else if(ndt_neighbor_search_method == "GICP_OMP"){
-      NODELET_INFO("search_method GICP_OMP is selected");
-      registration = gicp;
-    }
-    else {
-      if(ndt_neighbor_search_method == "KDTREE") {
-        NODELET_INFO("search_method KDTREE is selected");
-      } else {
-        NODELET_WARN("invalid search method was given");
-        NODELET_WARN("default method is selected (KDTREE)");
-      }
-      ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
-      registration = ndt;
-    }
 
+    if(reg_method == "NDT_OMP") {
+      NODELET_INFO_STREAM("NDT_OMP is selected : resolution(" << voxel_resolution << ")");
+      pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+      ndt->setTransformationEpsilon(0.01);
+      ndt->setResolution(voxel_resolution);
+
+      if(neighbor_search_method == "DIRECT1") {
+        NODELET_INFO_STREAM("use DIRECT1 search method");
+        ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
+      } else if(neighbor_search_method == "DIRECT7") {
+        NODELET_INFO_STREAM("use DIRECT7 search method");
+        ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
+      } else if(neighbor_search_method == "KDTREE") {
+        NODELET_INFO_STREAM("use KDTREE search method");
+        ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
+      } else {
+        NODELET_INFO_STREAM("unimplemented search method " << neighbor_search_method);
+      }
+
+      registration = ndt;
+    } else if (reg_method == "FAST_VGICP") {
+      NODELET_INFO_STREAM("FAST_VGICP is selected : resolution(" << voxel_resolution << ")");
+      pcl::shared_ptr<fast_gicp::FastVGICP<PointT, PointT>> vgicp(new fast_gicp::FastVGICP<PointT, PointT>());
+      vgicp->setResolution(voxel_resolution);
+
+      if(neighbor_search_method == "DIRECT1") {
+        NODELET_INFO_STREAM("use DIRECT1 search method");
+        vgicp->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
+      } else if(neighbor_search_method == "DIRECT7") {
+        NODELET_INFO_STREAM("use DIRECT7 search method");
+        vgicp->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
+      } else {
+        NODELET_INFO_STREAM("unimplemented search method " << neighbor_search_method);
+      }
+
+      registration = vgicp;
+    }
+    // #ifdef USE_VGICP_CUDA
+    else if(reg_method == "FAST_VGICP_CUDA") {
+      NODELET_INFO_STREAM("FAST_VGICP_CUDA is selected : resolution(" << voxel_resolution << ")");
+      pcl::shared_ptr<fast_gicp::FastVGICPCuda<PointT, PointT>> vgicp(new fast_gicp::FastVGICPCuda<PointT, PointT>());
+      vgicp->setResolution(voxel_resolution);
+
+      if(neighbor_search_method == "DIRECT1") {
+        NODELET_INFO_STREAM("use DIRECT1 search method");
+        vgicp->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
+      } else if(neighbor_search_method == "DIRECT7") {
+        NODELET_INFO_STREAM("use DIRECT7 search method");
+        vgicp->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
+      } else if(neighbor_search_method == "DIRECT_RADIUS") {
+        NODELET_INFO_STREAM("use DIRECT_RADIUS search method");
+        vgicp->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT_RADIUS, 3.0);
+      } else {
+        NODELET_INFO_STREAM("unimplemented search method " << neighbor_search_method);
+      }
+
+      if(covariance_estimation_method == "CPU_PARALLEL_KDTREE") {
+        NODELET_INFO_STREAM("use CPU_PARALLEL_KDTREE covariance estimation");
+        vgicp->setNearestNeighborSearchMethod(fast_gicp::NearestNeighborMethod::CPU_PARALLEL_KDTREE);
+      } else if(covariance_estimation_method == "GPU_BRUTEFORCE") {
+        NODELET_INFO_STREAM("use CPU_PARALLEL_KDTREE covariance estimation");
+        vgicp->setNearestNeighborSearchMethod(fast_gicp::NearestNeighborMethod::GPU_BRUTEFORCE);
+      } else if(covariance_estimation_method == "GPU_RBF_KERNEL") {
+        NODELET_INFO_STREAM("use CPU_PARALLEL_KDTREE covariance estimation");
+        vgicp->setNearestNeighborSearchMethod(fast_gicp::NearestNeighborMethod::GPU_RBF_KERNEL);
+      }
+
+      registration = vgicp;
+    }
+    // #endif
 
     // initialize pose estimator
     if(private_nh.param<bool>("specify_init_pose", true)) {
@@ -231,7 +282,18 @@ private:
     NODELET_INFO("globalmap received!");
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
     pcl::fromROSMsg(*points_msg, *cloud);
-    globalmap = cloud;
+
+    double downsample_resolution = private_nh.param<double>("globalmap_downsample_resolution", 0.5);
+    if(downsample_resolution < 1e-3) {
+      globalmap = cloud;
+    } else {
+      pcl::ApproximateVoxelGrid<PointT> voxelgrid;
+      voxelgrid.setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
+      voxelgrid.setInputCloud(cloud);
+
+      globalmap.reset(new pcl::PointCloud<PointT>);
+      voxelgrid.filter(*globalmap);
+    }
 
     registration->setInputTarget(globalmap);
   }

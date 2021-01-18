@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(hdl_localization)
 
+option(BUILD_VGICP_CUDA "Build GPU-powered VGICP" OFF)
+
 # -mavx causes a lot of errors!!
 if("$ENV{ROS_DISTRO}" STRGREATER "melodic")
   add_definitions(-std=c++17 -msse -msse2 -msse3 -msse4 -msse4.1 -msse4.2)
@@ -22,6 +24,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
   ndt_omp
+  fast_gicp
 )
 
 find_package(PCL 1.7 REQUIRED)
@@ -37,6 +40,10 @@ find_package(OpenMP)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
+
+if(BUILD_VGICP_CUDA)
+  add_definitions(-DUSE_VGICP_CUDA)
 endif()
 
 ########################
