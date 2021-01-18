@@ -14,6 +14,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 
+#include <std_srvs/Empty.h>
+
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
 
@@ -25,6 +27,9 @@
 #include <hdl_localization/pose_estimator.hpp>
 #include <hdl_localization/ScanMatchingStatus.h>
 
+#include <hdl_global_localization/SetGlobalMap.h>
+#include <hdl_global_localization/QueryGlobalLocalization.h>
+
 namespace hdl_localization {
 
 class HdlLocalizationNodelet : public nodelet::Nodelet {
@@ -35,7 +40,6 @@ public:
   }
   virtual ~HdlLocalizationNodelet() {
   }
-
 
   void onInit() override {
     nh = getNodeHandle();
@@ -61,6 +65,19 @@ public:
     pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
     status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
+
+    // global localization
+    use_global_localization = private_nh.param<bool>("use_global_localization", true);
+    if(use_global_localization) {
+      NODELET_INFO_STREAM("wait for global localization services");
+      ros::service::waitForService("/hdl_global_localization/set_global_map");
+      ros::service::waitForService("/hdl_global_localization/query");
+
+      set_global_map_service = nh.serviceClient<hdl_global_localization::SetGlobalMap>("/hdl_global_localization/set_global_map");
+      query_global_localization_service = nh.serviceClient<hdl_global_localization::QueryGlobalLocalization>("/hdl_global_localization/query");
+
+      relocalize_server = nh.advertiseService("/relocalize", &HdlLocalizationNodelet::relocalize, this);
+    }
   }
 
 private:
@@ -158,6 +175,7 @@ private:
     }
 
     auto filtered = downsample(cloud);
+    last_scan = filtered;
 
     // predict
     if(!use_imu) {
@@ -234,6 +252,58 @@ private:
     globalmap = cloud;
 
     registration->setInputTarget(globalmap);
+
+    if(use_global_localization) {
+      NODELET_INFO("set globalmap for global localization!");
+      hdl_global_localization::SetGlobalMap srv;
+      pcl::toROSMsg(*globalmap, srv.request.global_map);
+
+      if(!set_global_map_service.call(srv)) {
+        NODELET_INFO("failed to set global map");
+      } else {
+        NODELET_INFO("done");
+      }
+    }
+  }
+
+  /**
+   * @brief perform global localization to relocalize the sensor position
+   * @param
+   */
+  bool relocalize(std_srvs::EmptyRequest& req, std_srvs::EmptyResponse& res) {
+    if(last_scan == nullptr) {
+      NODELET_INFO_STREAM("no scan has been received");
+      return false;
+    }
+
+    pcl::PointCloud<PointT>::ConstPtr scan = last_scan;
+
+    hdl_global_localization::QueryGlobalLocalization srv;
+    pcl::toROSMsg(*scan, srv.request.cloud);
+    srv.request.max_num_candidates = 1;
+
+    if(!query_global_localization_service.call(srv) || srv.response.poses.empty()) {
+      NODELET_INFO_STREAM("global localization failed");
+      return false;
+    }
+
+    const auto& pose = srv.response.poses[0];
+
+    NODELET_INFO_STREAM("--- Global localization result ---");
+    NODELET_INFO_STREAM("Trans :" << pose.position.x << " " << pose.position.y << " " << pose.position.z);
+    NODELET_INFO_STREAM("Quat  :" << pose.orientation.x << " " << pose.orientation.y << " " << pose.orientation.z << " "<< pose.orientation.w);
+    NODELET_INFO_STREAM("Error :" << srv.response.errors[0]);
+    NODELET_INFO_STREAM("Inlier:" << srv.response.inlier_fractions[0]);
+
+    std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    pose_estimator.reset(new hdl_localization::PoseEstimator(
+      registration,
+      ros::Time::now(),
+      Eigen::Vector3f(pose.position.x, pose.position.y, pose.position.z),
+      Eigen::Quaternionf(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z),
+      private_nh.param<double>("cool_time_duration", 0.5)));
+
+    return true;
   }
 
   /**
@@ -437,8 +507,14 @@ private:
 
   // processing time buffer
   boost::circular_buffer<double> processing_time;
-};
 
+  // global localization
+  bool use_global_localization;
+  pcl::PointCloud<PointT>::ConstPtr last_scan;
+  ros::ServiceServer relocalize_server;
+  ros::ServiceClient set_global_map_service;
+  ros::ServiceClient query_global_localization_service;
+};
 }
 
 
