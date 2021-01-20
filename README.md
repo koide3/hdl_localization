@@ -4,6 +4,7 @@
 Video:<br>
 [![hdl_localization](http://img.youtube.com/vi/1EyF9kxJOqA/0.jpg)](https://youtu.be/1EyF9kxJOqA)
 
+[![Build Status](https://travis-ci.org/koide3/hdl_global_localization.svg?branch=master)](https://travis-ci.org/koide3/hdl_global_localization)
 
 ## Requirements
 ***hdl_localization*** requires the following libraries:
