@@ -3,19 +3,23 @@
   <!-- arguments -->
   <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="points_topic" default="/velodyne_points" />
+  <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
+  <!-- this is useful to match the LIDAR and IMU coodinate systems -->
   <arg name="odom_child_frame_id" default="velodyne" />
 
   <!-- optional arguments -->
+  <arg name="use_imu" default="false" />
+  <arg name="invert_imu" default="false" />
   <arg name="imu_topic" default="/gpsimu_driver/imu_data" />
   <arg name="enable_robot_odometry_prediction" value="false" />
-  <arg name="robot_odom_frame_id" value="robot_odom" />
+  <arg name="robot_odom_frame_id" value="odom" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
 
     <!-- globalmap_server_nodelet -->
     <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
-      <param name="globalmap_pcd" value="$(find hdl_localization)/data/map.pcd" />
+      <param name="globalmap_pcd" value="$(find hdl_localization)/data/map2.pcd" />
       <param name="convert_utm_to_local" value="true" />
       <param name="downsample_resolution" value="0.1" />
     </node>
@@ -28,8 +32,8 @@
       <param name="odom_child_frame_id" value="$(arg odom_child_frame_id)" />
       <!-- imu settings -->
       <!-- during "cool_time", imu inputs are ignored -->
-      <param name="use_imu" value="true" />
-      <param name="invert_imu" value="true" />
+      <param name="use_imu" value="$(arg use_imu)" />
+      <param name="invert_imu" value="$(arg invert_imu)" />
       <param name="cool_time_duration" value="2.0" />
       <!-- robot odometry-based prediction -->
       <param name="enable_robot_odometry_prediction" value="$(arg enable_robot_odometry_prediction)" />
