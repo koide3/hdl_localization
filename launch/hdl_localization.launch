@@ -6,9 +6,12 @@
   <arg name="odom_child_frame_id" default="velodyne" />
 
   <!-- optional arguments -->
+  <arg name="use_global_localization" default="true" />
   <arg name="imu_topic" default="/gpsimu_driver/imu_data" />
   <arg name="enable_robot_odometry_prediction" value="false" />
   <arg name="robot_odom_frame_id" value="robot_odom" />
+
+  <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
 
   <!-- in case you use velodyne_driver, comment out the following line -->
   <node pkg="nodelet" type="nodelet" name="$(arg nodelet_manager)" args="manager" output="screen"/>
@@ -49,5 +52,7 @@
       <param name="init_ori_x" value="0.0" />
       <param name="init_ori_y" value="0.0" />
       <param name="init_ori_z" value="0.0" />
+
+      <param name="use_global_localization" value="$(arg use_global_localization)" />
     </node>
 </launch>
