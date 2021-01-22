@@ -53,8 +53,29 @@ PoseEstimator::~PoseEstimator() {}
  * @param acc      acceleration
  * @param gyro     angular velocity
  */
+void PoseEstimator::predict(const ros::Time& stamp) {
+  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
+    prev_stamp = stamp;
+    return;
+  }
+
+  double dt = (stamp - prev_stamp).toSec();
+  prev_stamp = stamp;
+
+  ukf->setProcessNoiseCov(process_noise * dt);
+  ukf->system.dt = dt;
+
+  ukf->predict();
+}
+
+/**
+ * @brief predict
+ * @param stamp    timestamp
+ * @param acc      acceleration
+ * @param gyro     angular velocity
+ */
 void PoseEstimator::predict(const ros::Time& stamp, const Eigen::Vector3f& acc, const Eigen::Vector3f& gyro) {
-  if((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
+  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
     prev_stamp = stamp;
     return;
   }
@@ -89,7 +110,11 @@ void PoseEstimator::predict_odom(const Eigen::Matrix4f& odom_delta) {
     odom_ukf.reset(new kkl::alg::UnscentedKalmanFilterX<float, OdomSystem>(odom_system, 7, 7, 7, odom_process_noise, odom_measurement_noise, odom_mean, odom_cov));
   }
 
+  // invert quaternion if the rotation axis is flipped
   Eigen::Quaternionf quat(odom_delta.block<3, 3>(0, 0));
+  if(odom_quat().coeffs().dot(quat.coeffs()) < 0.0) {
+    quat.coeffs() *= -1.0f;
+  }
 
   Eigen::VectorXf control(7);
   control.middleRows(0, 3) = odom_delta.block<3, 1>(0, 3);
@@ -135,6 +160,10 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
     Eigen::VectorXf odom_mean = odom_ukf->mean;
     Eigen::MatrixXf odom_cov = odom_ukf->cov;
 
+    if (imu_mean.tail<4>().dot(odom_mean.tail<4>()) < 0.0) {
+      odom_mean.tail<4>() *= -1.0;
+    }
+
     Eigen::MatrixXf inv_imu_cov = imu_cov.inverse();
     Eigen::MatrixXf inv_odom_cov = odom_cov.inverse();
 
@@ -168,6 +197,10 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
   imu_pred_error = imu_guess.inverse() * registration->getFinalTransformation();
 
   if(odom_ukf) {
+    if (observation.tail<4>().dot(odom_ukf->mean.tail<4>()) < 0.0) {
+      odom_ukf->mean.tail<4>() *= -1.0;
+    }
+
     odom_ukf->correct(observation);
     odom_pred_error = odom_guess.inverse() * registration->getFinalTransformation();
   }

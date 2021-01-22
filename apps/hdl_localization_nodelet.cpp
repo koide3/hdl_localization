@@ -5,6 +5,8 @@
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl_ros/transforms.h>
+#include <nodelet/nodelet.h>
+#include <pluginlib/class_list_macros.h>
 
 #include <tf2_eigen/tf2_eigen.h>
 #include <tf2_ros/transform_listener.h>
@@ -12,20 +14,22 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <eigen_conversions/eigen_msg.h>
 
-#include <nav_msgs/Odometry.h>
+#include <std_srvs/Empty.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
-
-#include <nodelet/nodelet.h>
-#include <pluginlib/class_list_macros.h>
 
 #include <pcl/filters/voxel_grid.h>
 
 #include <pclomp/ndt_omp.h>
 
 #include <hdl_localization/pose_estimator.hpp>
+#include <hdl_localization/delta_estimater.hpp>
+
 #include <hdl_localization/ScanMatchingStatus.h>
+#include <hdl_global_localization/SetGlobalMap.h>
+#include <hdl_global_localization/QueryGlobalLocalization.h>
 
 namespace hdl_localization {
 
@@ -38,7 +42,6 @@ public:
   virtual ~HdlLocalizationNodelet() {
   }
 
-
   void onInit() override {
     nh = getNodeHandle();
     mt_nh = getMTNodeHandle();
@@ -50,8 +53,9 @@ public:
     odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
 
     use_imu = private_nh.param<bool>("use_imu", true);
-    invert_imu = private_nh.param<bool>("invert_imu", false);
-    if(use_imu) {
+    invert_acc = private_nh.param<bool>("invert_acc", false);
+    invert_gyro = private_nh.param<bool>("invert_gyro", false);
+    if (use_imu) {
       NODELET_INFO("enable imu-based prediction");
       imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
     }
@@ -62,42 +66,60 @@ public:
     pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
     aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
     status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
+
+    // global localization
+    use_global_localization = private_nh.param<bool>("use_global_localization", true);
+    if(use_global_localization) {
+      NODELET_INFO_STREAM("wait for global localization services");
+      ros::service::waitForService("/hdl_global_localization/set_global_map");
+      ros::service::waitForService("/hdl_global_localization/query");
+
+      set_global_map_service = nh.serviceClient<hdl_global_localization::SetGlobalMap>("/hdl_global_localization/set_global_map");
+      query_global_localization_service = nh.serviceClient<hdl_global_localization::QueryGlobalLocalization>("/hdl_global_localization/query");
+
+      relocalize_server = nh.advertiseService("/relocalize", &HdlLocalizationNodelet::relocalize, this);
+    }
   }
 
 private:
-  void initialize_params() {
-    // intialize scan matching method
-    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+  pcl::Registration<PointT, PointT>::Ptr create_registration() const {
     std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
-
     double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
-    boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
-    voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
-    downsample_filter = voxelgrid;
 
     pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
 
     ndt->setTransformationEpsilon(0.01);
     ndt->setResolution(ndt_resolution);
-    if(ndt_neighbor_search_method == "DIRECT1") {
+    if (ndt_neighbor_search_method == "DIRECT1") {
       NODELET_INFO("search_method DIRECT1 is selected");
       ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
-      registration = ndt;
-    } else if(ndt_neighbor_search_method == "DIRECT7") {
+    } else if (ndt_neighbor_search_method == "DIRECT7") {
       NODELET_INFO("search_method DIRECT7 is selected");
       ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
-      registration = ndt;
     } else {
-      if(ndt_neighbor_search_method == "KDTREE") {
+      if (ndt_neighbor_search_method == "KDTREE") {
         NODELET_INFO("search_method KDTREE is selected");
       } else {
         NODELET_WARN("invalid search method was given");
         NODELET_WARN("default method is selected (KDTREE)");
       }
       ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
-      registration = ndt;
     }
+    return ndt;
+  }
 
+  void initialize_params() {
+    // intialize scan matching method
+    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+    boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
+    voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
+    downsample_filter = voxelgrid;
+
+    registration = create_registration();
+
+    // global localization
+    relocalizing = false;
+    delta_estimater.reset(new DeltaEstimater(create_registration()));
 
     // initialize pose estimator
     if(private_nh.param<bool>("specify_init_pose", true)) {
@@ -154,12 +176,17 @@ private:
     }
 
     auto filtered = downsample(cloud);
+    last_scan = filtered;
+
+    if(relocalizing) {
+      delta_estimater->add_frame(filtered);
+    }
 
     Eigen::Matrix4f before = pose_estimator->matrix();
 
     // predict
     if(!use_imu) {
-      pose_estimator->predict(stamp, Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero());
+      pose_estimator->predict(stamp);
     } else {
       std::lock_guard<std::mutex> lock(imu_data_mutex);
       auto imu_iter = imu_data.begin();
@@ -169,8 +196,9 @@ private:
         }
         const auto& acc = (*imu_iter)->linear_acceleration;
         const auto& gyro = (*imu_iter)->angular_velocity;
-        double gyro_sign = invert_imu ? -1.0 : 1.0;
-        pose_estimator->predict((*imu_iter)->header.stamp, Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
+        double acc_sign = invert_acc ? -1.0 : 1.0;
+        double gyro_sign = invert_gyro ? -1.0 : 1.0;
+        pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
     }
@@ -195,7 +223,6 @@ private:
 
     // correct
     auto aligned = pose_estimator->correct(stamp, filtered);
-    Eigen::Matrix4f after = pose_estimator->matrix();
 
     if(aligned_pub.getNumSubscribers()) {
       aligned->header.frame_id = "map";
@@ -221,6 +248,68 @@ private:
     globalmap = cloud;
 
     registration->setInputTarget(globalmap);
+
+    if(use_global_localization) {
+      NODELET_INFO("set globalmap for global localization!");
+      hdl_global_localization::SetGlobalMap srv;
+      pcl::toROSMsg(*globalmap, srv.request.global_map);
+
+      if(!set_global_map_service.call(srv)) {
+        NODELET_INFO("failed to set global map");
+      } else {
+        NODELET_INFO("done");
+      }
+    }
+  }
+
+  /**
+   * @brief perform global localization to relocalize the sensor position
+   * @param
+   */
+  bool relocalize(std_srvs::EmptyRequest& req, std_srvs::EmptyResponse& res) {
+    if(last_scan == nullptr) {
+      NODELET_INFO_STREAM("no scan has been received");
+      return false;
+    }
+
+    relocalizing = true;
+    delta_estimater->reset();
+    pcl::PointCloud<PointT>::ConstPtr scan = last_scan;
+
+    hdl_global_localization::QueryGlobalLocalization srv;
+    pcl::toROSMsg(*scan, srv.request.cloud);
+    srv.request.max_num_candidates = 1;
+
+    if(!query_global_localization_service.call(srv) || srv.response.poses.empty()) {
+      relocalizing = false;
+      NODELET_INFO_STREAM("global localization failed");
+      return false;
+    }
+
+    const auto& result = srv.response.poses[0];
+
+    NODELET_INFO_STREAM("--- Global localization result ---");
+    NODELET_INFO_STREAM("Trans :" << result.position.x << " " << result.position.y << " " << result.position.z);
+    NODELET_INFO_STREAM("Quat  :" << result.orientation.x << " " << result.orientation.y << " " << result.orientation.z << " " << result.orientation.w);
+    NODELET_INFO_STREAM("Error :" << srv.response.errors[0]);
+    NODELET_INFO_STREAM("Inlier:" << srv.response.inlier_fractions[0]);
+
+    Eigen::Isometry3f pose = Eigen::Isometry3f::Identity();
+    pose.linear() = Eigen::Quaternionf(result.orientation.w, result.orientation.x, result.orientation.y, result.orientation.z).toRotationMatrix();
+    pose.translation() = Eigen::Vector3f(result.position.x, result.position.y, result.position.z);
+    pose = pose * delta_estimater->estimated_delta();
+
+    std::lock_guard<std::mutex> lock(pose_estimator_mutex);
+    pose_estimator.reset(new hdl_localization::PoseEstimator(
+      registration,
+      ros::Time::now(),
+      pose.translation(),
+      Eigen::Quaternionf(pose.linear()),
+      private_nh.param<double>("cool_time_duration", 0.5)));
+
+    relocalizing = false;
+
+    return true;
   }
 
   /**
@@ -350,7 +439,7 @@ private:
 
     if(pose_estimator->imu_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
-      status.prediction_labels.back().data = "imu";
+      status.prediction_labels.back().data = use_imu ? "imu" : "motion_model";
       status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->imu_prediction_error().get().cast<double>())).transform);
     }
 
@@ -373,7 +462,8 @@ private:
   std::string odom_child_frame_id;
 
   bool use_imu;
-  bool invert_imu;
+  bool invert_acc;
+  bool invert_gyro;
   ros::Subscriber imu_sub;
   ros::Subscriber points_sub;
   ros::Subscriber globalmap_sub;
@@ -399,8 +489,17 @@ private:
   // pose estimator
   std::mutex pose_estimator_mutex;
   std::unique_ptr<hdl_localization::PoseEstimator> pose_estimator;
-};
 
+  // global localization
+  bool use_global_localization;
+  std::atomic_bool relocalizing;
+  std::unique_ptr<DeltaEstimater> delta_estimater;
+
+  pcl::PointCloud<PointT>::ConstPtr last_scan;
+  ros::ServiceServer relocalize_server;
+  ros::ServiceClient set_global_map_service;
+  ros::ServiceClient query_global_localization_service;
+};
 }
 
 

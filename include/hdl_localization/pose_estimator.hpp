@@ -41,6 +41,12 @@ public:
   /**
    * @brief predict
    * @param stamp    timestamp
+   */
+  void predict(const ros::Time& stamp);
+
+  /**
+   * @brief predict
+   * @param stamp    timestamp
    * @param acc      acceleration
    * @param gyro     angular velocity
    */

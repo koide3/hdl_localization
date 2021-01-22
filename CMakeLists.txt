@@ -27,6 +27,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
   ndt_omp
+  hdl_global_localization
 )
 
 find_package(PCL 1.7 REQUIRED)
