@@ -34,10 +34,10 @@ The estimated pose can be reset using using "2D Pose Estimate" on rviz
 ## Topics
 - ***/odom*** (nav_msgs/Odometry)
   - Estimated sensor pose in the map frame
-- ***/aligned_points ***
+- ***/aligned_points***
   - Input point cloud aligned with the map
 - ***/status*** (hdl_localization/
-  - Scan matching information (e.g., convergence, matching error, and inlier fraction)
+  - Scan matching result information (e.g., convergence, matching error, and inlier fraction)
 
 ## Services
 - ***/relocalize*** (std_srvs/Empty)
