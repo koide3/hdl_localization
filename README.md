@@ -31,13 +31,18 @@ cd .. && catkin_make -DCMAKE_BUILD_TYPE=Release
 All configurable parameters are listed in *launch/hdl_localization.launch* as ros params.
 The estimated pose can be reset using using "2D Pose Estimate" on rviz
 
+## Topics
+- ***/odom*** (nav_msgs/Odometry)
+  - Estimated sensor pose in the map frame
+- ***/aligned_points ***
+  - Input point cloud aligned with the map
+- ***/status*** (hdl_localization/
+  - Scan matching information (e.g., convergence, matching error, and inlier fraction)
+
 ## Services
 - ***/relocalize*** (std_srvs/Empty)
   - Reset the sensor pose with the global localization result
   - For details of the global localization method, see [hdl_global_localization](https://github.com/koide3/hdl_global_localization)
-
-## Services
-- ```/relocalize``` (std_srvs::Empty) : Perform global localization to relocalize the sensor position
 
 ## Example
 
