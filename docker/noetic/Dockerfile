@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     && apt-get install --no-install-recommends -y wget nano build-essential \
     git libgtest-dev libboost-all-dev libopencv-dev \
     ros-noetic-tf2 ros-noetic-tf2-ros ros-noetic-tf2-geometry-msgs \
-    ros-noetic-tf-conversions ros-noetic-pcl-ros \
+    ros-noetic-eigen-conversions ros-noetic-tf-conversions ros-noetic-pcl-ros \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
