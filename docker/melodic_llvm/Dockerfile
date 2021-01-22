@@ -2,7 +2,9 @@ FROM ros:melodic
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
     && apt-get install --no-install-recommends -y wget nano build-essential \
-    libomp-dev libgtest-dev libboost-all-dev libopencv-dev clang lld ros-melodic-tf-conversions ros-melodic-pcl-ros \
+    libomp-dev libgtest-dev libboost-all-dev libopencv-dev clang lld \
+    ros-melodic-tf2 ros-melodic-tf2-ros ros-melodic-tf2-geometry-msgs \
+    ros-melodic-tf-conversions ros-melodic-pcl-ros \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
