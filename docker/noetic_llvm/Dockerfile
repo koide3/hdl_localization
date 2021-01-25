@@ -15,6 +15,7 @@ WORKDIR /root/catkin_ws/src
 RUN /bin/bash -c '. /opt/ros/noetic/setup.bash; catkin_init_workspace'
 
 RUN git clone https://github.com/koide3/ndt_omp
+RUN git clone https://github.com/SMRT-AIST/fast_gicp --recursive
 RUN git clone https://github.com/koide3/hdl_global_localization
 
 COPY . /root/catkin_ws/src/hdl_localization/
