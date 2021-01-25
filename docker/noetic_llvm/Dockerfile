@@ -2,7 +2,9 @@ FROM ros:noetic
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
     && apt-get install --no-install-recommends -y wget nano build-essential \
-    git clang lld libomp-dev libgtest-dev libboost-all-dev libopencv-dev ros-noetic-tf-conversions ros-noetic-pcl-ros \
+    git clang lld libomp-dev libgtest-dev libboost-all-dev libopencv-dev \
+    ros-noetic-tf2 ros-noetic-tf2-ros ros-noetic-tf2-geometry-msgs \
+    ros-noetic-eigen-conversions ros-noetic-tf-conversions ros-noetic-pcl-ros \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

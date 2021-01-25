@@ -18,8 +18,8 @@ class Plotter(object):
 	def status_callback(self, status_msg):
 		self.status_buffer.append(status_msg)
 
-		if len(self.status_buffer) > 100:
-			self.status_buffer = self.status_buffer[-100:]
+		if len(self.status_buffer) > 50:
+			self.status_buffer = self.status_buffer[-50:]
 
 	def timer_callback(self, event):
 		if len(self.status_buffer) < 2:
@@ -37,6 +37,9 @@ class Plotter(object):
 				t = status.header.stamp.secs + status.header.stamp.nsecs / 1e9
 				t_error = numpy.linalg.norm(trans)
 				r_error = numpy.linalg.norm(scipy.spatial.transform.Rotation.from_quat(quat).as_rotvec())
+
+				if len(errors[label.data]) and abs(errors[label.data][-1][0] - t) > 1.0:
+					errors[label.data] = []
 
 				errors[label.data].append((t, t_error, r_error))
 
