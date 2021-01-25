@@ -23,6 +23,7 @@
 #include <pcl/filters/voxel_grid.h>
 
 #include <pclomp/ndt_omp.h>
+#include <fast_gicp/ndt/ndt_cuda.hpp>
 
 #include <hdl_localization/pose_estimator.hpp>
 #include <hdl_localization/delta_estimater.hpp>
@@ -83,29 +84,60 @@ public:
 
 private:
   pcl::Registration<PointT, PointT>::Ptr create_registration() const {
+    std::string reg_method = private_nh.param<std::string>("reg_method", "NDT_OMP");
     std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
+    double ndt_neighbor_search_radius = private_nh.param<double>("ndt_neighbor_search_radius", 2.0);
     double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
 
-    pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+    if(reg_method == "NDT_OMP") {
+      NODELET_INFO("NDT_OMP is selected");
+      pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+      ndt->setTransformationEpsilon(0.01);
+      ndt->setResolution(ndt_resolution);
+      if (ndt_neighbor_search_method == "DIRECT1") {
+        NODELET_INFO("search_method DIRECT1 is selected");
+        ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
+      } else if (ndt_neighbor_search_method == "DIRECT7") {
+        NODELET_INFO("search_method DIRECT7 is selected");
+        ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
+      } else {
+        if (ndt_neighbor_search_method == "KDTREE") {
+          NODELET_INFO("search_method KDTREE is selected");
+        } else {
+          NODELET_WARN("invalid search method was given");
+          NODELET_WARN("default method is selected (KDTREE)");
+        }
+        ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
+      }
+      return ndt;
+    } else if(reg_method.find("NDT_CUDA") != std::string::npos) {
+      NODELET_INFO("NDT_CUDA is selected");
+      boost::shared_ptr<fast_gicp::NDTCuda<PointT, PointT>> ndt(new fast_gicp::NDTCuda<PointT, PointT>);
+      ndt->setResolution(ndt_resolution);
 
-    ndt->setTransformationEpsilon(0.01);
-    ndt->setResolution(ndt_resolution);
-    if (ndt_neighbor_search_method == "DIRECT1") {
-      NODELET_INFO("search_method DIRECT1 is selected");
-      ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
-    } else if (ndt_neighbor_search_method == "DIRECT7") {
-      NODELET_INFO("search_method DIRECT7 is selected");
-      ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
-    } else {
-      if (ndt_neighbor_search_method == "KDTREE") {
-        NODELET_INFO("search_method KDTREE is selected");
+      if(reg_method.find("D2D") != std::string::npos) {
+        ndt->setDistanceMode(fast_gicp::NDTDistanceMode::D2D);
+      } else if (reg_method.find("P2D") != std::string::npos) {
+        ndt->setDistanceMode(fast_gicp::NDTDistanceMode::P2D);
+      }
+
+      if (ndt_neighbor_search_method == "DIRECT1") {
+        NODELET_INFO("search_method DIRECT1 is selected");
+        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
+      } else if (ndt_neighbor_search_method == "DIRECT7") {
+        NODELET_INFO("search_method DIRECT7 is selected");
+        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
+      } else if (ndt_neighbor_search_method == "DIRECT_RADIUS") {
+        NODELET_INFO_STREAM("search_method DIRECT_RADIUS is selected : " << ndt_neighbor_search_radius);
+        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT_RADIUS, ndt_neighbor_search_radius);
       } else {
         NODELET_WARN("invalid search method was given");
-        NODELET_WARN("default method is selected (KDTREE)");
       }
-      ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
+      return ndt;
     }
-    return ndt;
+
+    NODELET_ERROR_STREAM("unknown registration method:" << reg_method);
+    return nullptr;
   }
 
   void initialize_params() {
@@ -115,9 +147,11 @@ private:
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     downsample_filter = voxelgrid;
 
+    NODELET_INFO("create registration method for localization");
     registration = create_registration();
 
     // global localization
+    NODELET_INFO("create registration method for fallback during relocalization");
     relocalizing = false;
     delta_estimater.reset(new DeltaEstimater(create_registration()));
 

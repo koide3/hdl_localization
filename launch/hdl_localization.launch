@@ -15,6 +15,7 @@
   <arg name="imu_topic" default="/imu/data" />
   <arg name="enable_robot_odometry_prediction" value="false" />
   <arg name="robot_odom_frame_id" value="odom" />
+  <arg name="plot_estimation_errors" value="false" />
 
   <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
 
@@ -44,8 +45,11 @@
       <param name="enable_robot_odometry_prediction" value="$(arg enable_robot_odometry_prediction)" />
       <param name="robot_odom_frame_id" value="$(arg robot_odom_frame_id)" />
       <!-- ndt settings -->
+      <!-- available reg_methods: NDT_OMP, NDT_CUDA_P2D, NDT_CUDA_D2D-->
+      <param name="reg_method" value="NDT_OMP" />
       <!-- if NDT is slow for your PC, try DIRECT1 serach method, which is a bit unstable but extremely fast -->
       <param name="ndt_neighbor_search_method" value="DIRECT7" />
+      <param name="ndt_neighbor_search_radius" value="2.0" />
       <param name="ndt_resolution" value="1.0" />
       <param name="downsample_resolution" value="0.1" />
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
@@ -61,4 +65,6 @@
 
       <param name="use_global_localization" value="$(arg use_global_localization)" />
     </node>
+
+    <node pkg="hdl_localization" type="plot_status.py" name="plot_estimation_errors" if="$(arg plot_estimation_errors)" />
 </launch>

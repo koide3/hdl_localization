@@ -27,6 +27,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
   ndt_omp
+  fast_gicp
   hdl_global_localization
 )
 

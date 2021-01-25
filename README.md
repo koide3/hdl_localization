@@ -14,6 +14,7 @@ Video:<br>
 The following ros packages are required:
 - pcl_ros
 - [ndt_omp](https://github.com/koide3/ndt_omp)
+- [fast_gicp](https://github.com/SMRT-AIST/fast_gicp)
 - [hdl_global_localization](https://github.com/koide3/hdl_global_localization)
 
 ## Installation
@@ -21,10 +22,15 @@ The following ros packages are required:
 ```bash
 cd /your/catkin_ws/src
 git clone https://github.com/koide3/ndt_omp
+git clone https://github.com/SMRT-AIST/fast_gicp --recursive
 git clone https://github.com/koide3/hdl_localization
 git clone https://github.com/koide3/hdl_global_localization
 
-cd .. && catkin_make -DCMAKE_BUILD_TYPE=Release
+cd /your/catkin_ws
+catkin_make -DCMAKE_BUILD_TYPE=Release
+
+# if you want to enable CUDA-accelerated NDT
+# catkin_make -DCMAKE_BUILD_TYPE=Release -DBUILD_VGICP_CUDA=ON
 ```
 
 ## Parameters
