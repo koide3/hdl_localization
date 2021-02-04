@@ -15,6 +15,11 @@ set(CMAKE_BUILD_TYPE "RELEASE")
 
 find_package(catkin REQUIRED COMPONENTS
   nodelet
+  tf2
+  tf2_ros
+  tf2_eigen
+  tf2_geometry_msgs
+  eigen_conversions
   pcl_ros
   roscpp
   rospy
@@ -22,6 +27,7 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
   ndt_omp
+  fast_gicp
   hdl_global_localization
 )
 
@@ -67,7 +73,10 @@ include_directories(
 )
 
 # nodelets
-add_library(hdl_localization_nodelet apps/hdl_localization_nodelet.cpp)
+add_library(hdl_localization_nodelet
+  src/hdl_localization/pose_estimator.cpp
+  apps/hdl_localization_nodelet.cpp
+)
 target_link_libraries(hdl_localization_nodelet
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}

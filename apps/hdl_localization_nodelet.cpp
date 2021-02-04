@@ -1,15 +1,18 @@
 #include <mutex>
 #include <memory>
 #include <iostream>
-#include <boost/circular_buffer.hpp>
 
 #include <ros/ros.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl_ros/transforms.h>
-#include <tf_conversions/tf_eigen.h>
-#include <tf/transform_broadcaster.h>
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.h>
+
+#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <eigen_conversions/eigen_msg.h>
 
 #include <std_srvs/Empty.h>
 #include <sensor_msgs/Imu.h>
@@ -20,7 +23,7 @@
 #include <pcl/filters/voxel_grid.h>
 
 #include <pclomp/ndt_omp.h>
-#include <pclomp/gicp_omp.h>
+#include <fast_gicp/ndt/ndt_cuda.hpp>
 
 #include <hdl_localization/pose_estimator.hpp>
 #include <hdl_localization/delta_estimater.hpp>
@@ -35,7 +38,7 @@ class HdlLocalizationNodelet : public nodelet::Nodelet {
 public:
   using PointT = pcl::PointXYZI;
 
-  HdlLocalizationNodelet() {
+  HdlLocalizationNodelet() : tf_buffer(), tf_listener(tf_buffer) {
   }
   virtual ~HdlLocalizationNodelet() {
   }
@@ -51,8 +54,9 @@ public:
     odom_child_frame_id = private_nh.param<std::string>("odom_child_frame_id", "base_link");
 
     use_imu = private_nh.param<bool>("use_imu", true);
-    invert_imu = private_nh.param<bool>("invert_imu", false);
-    if(use_imu) {
+    invert_acc = private_nh.param<bool>("invert_acc", false);
+    invert_gyro = private_nh.param<bool>("invert_gyro", false);
+    if (use_imu) {
       NODELET_INFO("enable imu-based prediction");
       imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
     }
@@ -80,31 +84,60 @@ public:
 
 private:
   pcl::Registration<PointT, PointT>::Ptr create_registration() const {
+    std::string reg_method = private_nh.param<std::string>("reg_method", "NDT_OMP");
     std::string ndt_neighbor_search_method = private_nh.param<std::string>("ndt_neighbor_search_method", "DIRECT7");
+    double ndt_neighbor_search_radius = private_nh.param<double>("ndt_neighbor_search_radius", 2.0);
     double ndt_resolution = private_nh.param<double>("ndt_resolution", 1.0);
 
-    pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+    if(reg_method == "NDT_OMP") {
+      NODELET_INFO("NDT_OMP is selected");
+      pclomp::NormalDistributionsTransform<PointT, PointT>::Ptr ndt(new pclomp::NormalDistributionsTransform<PointT, PointT>());
+      ndt->setTransformationEpsilon(0.01);
+      ndt->setResolution(ndt_resolution);
+      if (ndt_neighbor_search_method == "DIRECT1") {
+        NODELET_INFO("search_method DIRECT1 is selected");
+        ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
+      } else if (ndt_neighbor_search_method == "DIRECT7") {
+        NODELET_INFO("search_method DIRECT7 is selected");
+        ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
+      } else {
+        if (ndt_neighbor_search_method == "KDTREE") {
+          NODELET_INFO("search_method KDTREE is selected");
+        } else {
+          NODELET_WARN("invalid search method was given");
+          NODELET_WARN("default method is selected (KDTREE)");
+        }
+        ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
+      }
+      return ndt;
+    } else if(reg_method.find("NDT_CUDA") != std::string::npos) {
+      NODELET_INFO("NDT_CUDA is selected");
+      boost::shared_ptr<fast_gicp::NDTCuda<PointT, PointT>> ndt(new fast_gicp::NDTCuda<PointT, PointT>);
+      ndt->setResolution(ndt_resolution);
 
-    ndt->setTransformationEpsilon(0.01);
-    ndt->setResolution(ndt_resolution);
-    if (ndt_neighbor_search_method == "DIRECT1") {
-      NODELET_INFO("search_method DIRECT1 is selected");
-      ndt->setNeighborhoodSearchMethod(pclomp::DIRECT1);
-      return ndt;
-    } else if (ndt_neighbor_search_method == "DIRECT7") {
-      NODELET_INFO("search_method DIRECT7 is selected");
-      ndt->setNeighborhoodSearchMethod(pclomp::DIRECT7);
-      return ndt;
-    } else {
-      if (ndt_neighbor_search_method == "KDTREE") {
-        NODELET_INFO("search_method KDTREE is selected");
+      if(reg_method.find("D2D") != std::string::npos) {
+        ndt->setDistanceMode(fast_gicp::NDTDistanceMode::D2D);
+      } else if (reg_method.find("P2D") != std::string::npos) {
+        ndt->setDistanceMode(fast_gicp::NDTDistanceMode::P2D);
+      }
+
+      if (ndt_neighbor_search_method == "DIRECT1") {
+        NODELET_INFO("search_method DIRECT1 is selected");
+        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT1);
+      } else if (ndt_neighbor_search_method == "DIRECT7") {
+        NODELET_INFO("search_method DIRECT7 is selected");
+        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT7);
+      } else if (ndt_neighbor_search_method == "DIRECT_RADIUS") {
+        NODELET_INFO_STREAM("search_method DIRECT_RADIUS is selected : " << ndt_neighbor_search_radius);
+        ndt->setNeighborSearchMethod(fast_gicp::NeighborSearchMethod::DIRECT_RADIUS, ndt_neighbor_search_radius);
       } else {
         NODELET_WARN("invalid search method was given");
-        NODELET_WARN("default method is selected (KDTREE)");
       }
-      ndt->setNeighborhoodSearchMethod(pclomp::KDTREE);
       return ndt;
     }
+
+    NODELET_ERROR_STREAM("unknown registration method:" << reg_method);
+    return nullptr;
   }
 
   void initialize_params() {
@@ -114,9 +147,11 @@ private:
     voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
     downsample_filter = voxelgrid;
 
+    NODELET_INFO("create registration method for localization");
     registration = create_registration();
 
     // global localization
+    NODELET_INFO("create registration method for fallback during relocalization");
     relocalizing = false;
     delta_estimater.reset(new DeltaEstimater(create_registration()));
 
@@ -169,7 +204,7 @@ private:
 
     // transform pointcloud into odom_child_frame_id
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
-    if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_listener)) {
+    if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
         NODELET_ERROR("point cloud cannot be transformed into target frame!!");
         return;
     }
@@ -181,9 +216,11 @@ private:
       delta_estimater->add_frame(filtered);
     }
 
+    Eigen::Matrix4f before = pose_estimator->matrix();
+
     // predict
     if(!use_imu) {
-      pose_estimator->predict(stamp, Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero());
+      pose_estimator->predict(stamp);
     } else {
       std::lock_guard<std::mutex> lock(imu_data_mutex);
       auto imu_iter = imu_data.begin();
@@ -193,8 +230,9 @@ private:
         }
         const auto& acc = (*imu_iter)->linear_acceleration;
         const auto& gyro = (*imu_iter)->angular_velocity;
-        double gyro_sign = invert_imu ? -1.0 : 1.0;
-        pose_estimator->predict((*imu_iter)->header.stamp, Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
+        double acc_sign = invert_acc ? -1.0 : 1.0;
+        double gyro_sign = invert_gyro ? -1.0 : 1.0;
+        pose_estimator->predict((*imu_iter)->header.stamp, acc_sign * Eigen::Vector3f(acc.x, acc.y, acc.z), gyro_sign * Eigen::Vector3f(gyro.x, gyro.y, gyro.z));
       }
       imu_data.erase(imu_data.begin(), imu_iter);
     }
@@ -202,24 +240,18 @@ private:
     // odometry-based prediction
     ros::Time last_correction_time = pose_estimator->last_correction_time();
     if(private_nh.param<bool>("enable_robot_odometry_prediction", false) && !last_correction_time.isZero()) {
-      tf::StampedTransform transform;
-      if(tf_listener.waitForTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, last_correction_time, robot_odom_frame_id, ros::Duration(0))) {
-        tf_listener.lookupTransform(cloud->header.frame_id, stamp, cloud->header.frame_id, last_correction_time, robot_odom_frame_id, transform);
-      } else if(tf_listener.waitForTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, last_correction_time, robot_odom_frame_id, ros::Duration(0))) {
-        tf_listener.lookupTransform(cloud->header.frame_id, ros::Time(0), cloud->header.frame_id, last_correction_time, robot_odom_frame_id, transform);
+      geometry_msgs::TransformStamped odom_delta;
+      if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0.1))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, stamp, robot_odom_frame_id, ros::Duration(0));
+      } else if(tf_buffer.canTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0))) {
+        odom_delta = tf_buffer.lookupTransform(odom_child_frame_id, last_correction_time, odom_child_frame_id, ros::Time(0), robot_odom_frame_id, ros::Duration(0));
       }
 
-      if(transform.stamp_.isZero()) {
+      if(odom_delta.header.stamp.isZero()) {
         NODELET_WARN_STREAM("failed to look up transform between " << cloud->header.frame_id << " and " << robot_odom_frame_id);
       } else {
-        const auto& origin = transform.getOrigin();
-        const auto& rotation = transform.getRotation();
-
-        Eigen::Matrix4f delta = Eigen::Matrix4f::Identity();
-        delta.block<3, 3>(0, 0) = Eigen::Quaternionf(rotation.w(), rotation.x(), rotation.y(), rotation.z()).toRotationMatrix();
-        delta.block<3, 1>(0, 3) = Eigen::Vector3f(origin.x(), origin.y(), origin.z());
-
-        pose_estimator->predict_odom(delta);
+        Eigen::Isometry3d delta = tf2::transformToEigen(odom_delta);
+        pose_estimator->predict_odom(delta.cast<float>().matrix());
       }
     }
 
@@ -358,19 +390,43 @@ private:
    */
   void publish_odometry(const ros::Time& stamp, const Eigen::Matrix4f& pose) {
     // broadcast the transform over tf
-    geometry_msgs::TransformStamped odom_trans = matrix2transform(stamp, pose, "map", odom_child_frame_id);
-    pose_broadcaster.sendTransform(odom_trans);
+    if(tf_buffer.canTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0))) {
+      geometry_msgs::TransformStamped map_wrt_frame = tf2::eigenToTransform(Eigen::Isometry3d(pose.inverse().cast<double>()));
+      map_wrt_frame.header.stamp = stamp;
+      map_wrt_frame.header.frame_id = odom_child_frame_id;
+      map_wrt_frame.child_frame_id = "map";
+
+      geometry_msgs::TransformStamped frame_wrt_odom = tf_buffer.lookupTransform(robot_odom_frame_id, odom_child_frame_id, ros::Time(0), ros::Duration(0.1));
+      Eigen::Matrix4f frame2odom = tf2::transformToEigen(frame_wrt_odom).cast<float>().matrix();
+
+      geometry_msgs::TransformStamped map_wrt_odom;
+      tf2::doTransform(map_wrt_frame, map_wrt_odom, frame_wrt_odom);
+
+      tf2::Transform odom_wrt_map;
+      tf2::fromMsg(map_wrt_odom.transform, odom_wrt_map);
+      odom_wrt_map = odom_wrt_map.inverse();
+
+      geometry_msgs::TransformStamped odom_trans;
+      odom_trans.transform = tf2::toMsg(odom_wrt_map);
+      odom_trans.header.stamp = stamp;
+      odom_trans.header.frame_id = "map";
+      odom_trans.child_frame_id = robot_odom_frame_id;
+
+      tf_broadcaster.sendTransform(odom_trans);
+    } else {
+      geometry_msgs::TransformStamped odom_trans = tf2::eigenToTransform(Eigen::Isometry3d(pose.cast<double>()));
+      odom_trans.header.stamp = stamp;
+      odom_trans.header.frame_id = "map";
+      odom_trans.child_frame_id = odom_child_frame_id;
+      tf_broadcaster.sendTransform(odom_trans);
+    }
 
     // publish the transform
     nav_msgs::Odometry odom;
     odom.header.stamp = stamp;
     odom.header.frame_id = "map";
 
-    odom.pose.pose.position.x = pose(0, 3);
-    odom.pose.pose.position.y = pose(1, 3);
-    odom.pose.pose.position.z = pose(2, 3);
-    odom.pose.pose.orientation = odom_trans.transform.rotation;
-
+    tf::poseEigenToMsg(Eigen::Isometry3d(pose.cast<double>()), odom.pose.pose);
     odom.child_frame_id = odom_child_frame_id;
     odom.twist.twist.linear.x = 0.0;
     odom.twist.twist.linear.y = 0.0;
@@ -402,80 +458,32 @@ private:
       }
     }
     status.inlier_fraction = static_cast<float>(num_inliers) / aligned->size();
-    status.relative_pose = matrix2pose(registration->getFinalTransformation());
+    status.relative_pose = tf2::eigenToTransform(Eigen::Isometry3d(registration->getFinalTransformation().cast<double>())).transform;
 
     status.prediction_labels.reserve(2);
     status.prediction_errors.reserve(2);
 
+    std::vector<double> errors(6, 0.0);
+
     if(pose_estimator->wo_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = "without_pred";
-      status.prediction_errors.push_back(matrix2pose(pose_estimator->wo_prediction_error().get()));
+      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->wo_prediction_error().get().cast<double>())).transform);
     }
 
     if(pose_estimator->imu_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
-      status.prediction_labels.back().data = "imu";
-      status.prediction_errors.push_back(matrix2pose(pose_estimator->imu_prediction_error().get()));
+      status.prediction_labels.back().data = use_imu ? "imu" : "motion_model";
+      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->imu_prediction_error().get().cast<double>())).transform);
     }
 
     if(pose_estimator->odom_prediction_error()) {
       status.prediction_labels.push_back(std_msgs::String());
       status.prediction_labels.back().data = "odom";
-      status.prediction_errors.push_back(matrix2pose(pose_estimator->odom_prediction_error().get()));
+      status.prediction_errors.push_back(tf2::eigenToTransform(Eigen::Isometry3d(pose_estimator->odom_prediction_error().get().cast<double>())).transform);
     }
 
     status_pub.publish(status);
-  }
-
-  /**
-   * @brief convert an Eigen::Matrix to TransformedStamped
-   * @param stamp           timestamp
-   * @param pose            pose matrix
-   * @param frame_id        frame_id
-   * @param child_frame_id  child_frame_id
-   * @return transform
-   */
-  geometry_msgs::TransformStamped matrix2transform(const ros::Time& stamp, const Eigen::Matrix4f& pose, const std::string& frame_id, const std::string& child_frame_id) {
-    Eigen::Quaternionf quat(pose.block<3, 3>(0, 0));
-    quat.normalize();
-    geometry_msgs::Quaternion odom_quat;
-    odom_quat.w = quat.w();
-    odom_quat.x = quat.x();
-    odom_quat.y = quat.y();
-    odom_quat.z = quat.z();
-
-    geometry_msgs::TransformStamped odom_trans;
-    odom_trans.header.stamp = stamp;
-    odom_trans.header.frame_id = frame_id;
-    odom_trans.child_frame_id = child_frame_id;
-
-    odom_trans.transform.translation.x = pose(0, 3);
-    odom_trans.transform.translation.y = pose(1, 3);
-    odom_trans.transform.translation.z = pose(2, 3);
-    odom_trans.transform.rotation = odom_quat;
-
-    return odom_trans;
-  }
-
-  /**
-   * @brief convert an Eigen::Matrix to geometry_msgs::Pose
-   */
-  geometry_msgs::Pose matrix2pose(const Eigen::Matrix4f& mat) {
-    Eigen::Quaternionf quat(mat.block<3, 3>(0, 0));
-    Eigen::Vector3f trans = mat.block<3, 1>(0, 3);
-
-    geometry_msgs::Pose pose;
-    pose.position.x = trans.x();
-    pose.position.y = trans.y();
-    pose.position.z = trans.z();
-
-    pose.orientation.w = quat.w();
-    pose.orientation.x = quat.x();
-    pose.orientation.y = quat.y();
-    pose.orientation.z = quat.z();
-
-    return pose;
   }
 
 private:
@@ -488,7 +496,8 @@ private:
   std::string odom_child_frame_id;
 
   bool use_imu;
-  bool invert_imu;
+  bool invert_acc;
+  bool invert_gyro;
   ros::Subscriber imu_sub;
   ros::Subscriber points_sub;
   ros::Subscriber globalmap_sub;
@@ -497,8 +506,10 @@ private:
   ros::Publisher pose_pub;
   ros::Publisher aligned_pub;
   ros::Publisher status_pub;
-  tf::TransformBroadcaster pose_broadcaster;
-  tf::TransformListener tf_listener;
+
+  tf2_ros::Buffer tf_buffer;
+  tf2_ros::TransformListener tf_listener;
+  tf2_ros::TransformBroadcaster tf_broadcaster;
 
   // imu input buffer
   std::mutex imu_data_mutex;

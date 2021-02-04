@@ -72,6 +72,39 @@ public:
    * @brief predict
    * @param control  input vector
    */
+  void predict() {
+    // calculate sigma points
+    ensurePositiveFinite(cov);
+    computeSigmaPoints(mean, cov, sigma_points);
+    for (int i = 0; i < S; i++) {
+      sigma_points.row(i) = system.f(sigma_points.row(i));
+    }
+
+    const auto& R = process_noise;
+
+    // unscented transform
+    VectorXt mean_pred(mean.size());
+    MatrixXt cov_pred(cov.rows(), cov.cols());
+
+    mean_pred.setZero();
+    cov_pred.setZero();
+    for (int i = 0; i < S; i++) {
+      mean_pred += weights[i] * sigma_points.row(i);
+    }
+    for (int i = 0; i < S; i++) {
+      VectorXt diff = sigma_points.row(i).transpose() - mean_pred;
+      cov_pred += weights[i] * diff * diff.transpose();
+    }
+    cov_pred += R;
+
+    mean = mean_pred;
+    cov = cov_pred;
+  }
+
+  /**
+   * @brief predict
+   * @param control  input vector
+   */
   void predict(const VectorXt& control) {
     // calculate sigma points
     ensurePositiveFinite(cov);
