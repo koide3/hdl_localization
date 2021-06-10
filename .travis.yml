@@ -1,20 +1,22 @@
 sudo: required
 language: generic
 dist: focal
-
 services:
-  - docker
-
+- docker
 matrix:
   include:
-    - name: "Focal Fossa noetic"
-      env: ROS_DISTRO=noetic
-    - name: "Focal Fossa noetic_llvm"
-      env: ROS_DISTRO=noetic_llvm
-    - name: "Bionic melodic_llvm"
-      env: ROS_DISTRO=melodic_llvm
-    - name: "Bionic melodic"
-      env: ROS_DISTRO=melodic
-
+  - name: Focal Fossa noetic
+    env: ROS_DISTRO=noetic
+  - name: Focal Fossa noetic_llvm
+    env: ROS_DISTRO=noetic_llvm
+  - name: Bionic melodic_llvm
+    env: ROS_DISTRO=melodic_llvm
+  - name: Bionic melodic
+    env: ROS_DISTRO=melodic
 script:
-  - docker build -f ./docker/$ROS_DISTRO/Dockerfile .
+- echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin || true
+- docker build -f ./docker/$ROS_DISTRO/Dockerfile .
+env:
+  global:
+  - secure: S1eT1VgXSDwXPI24WCXidW5aQBEFvHZhRuwbLX52IBR9Abv3OLVhqcy+p/DVyfGgffdvflCTzupyfKpJtEhYvW9Poxg58aNe60acyAgaDeJ8wLbA1piOaBm3i4/Kx/rpbhHyRp+EANe1AC5W4o6z7+EB+IlFCjVq7C0t1ZfImWmJM/jD99l9g7oFu7eq+6+YyI7ZDQ41i7Jn3aid4OwOpFyW+JZ9WV+vAoCloNWWJb+cO0Gpeip2ei4tZonr67fQRcrWeFn0PJPmfhHzSINl0NgYq1Z7dOE7ngLS8CYGVYeZmUSy6+DJHYPfFFR6tPXkgp4BKEtG5JK0UFP2IA7Niv2jMvmvCAl7w/6+KF6kJV6K0F1MpSl3Zft/WtcsRzH1hKWQxegAG7mjrSLf2OreuE9D7TbYfFCinGAq3czyTB0EbMmq/qtkpzLk+mPrRZNQ8PVGf81Zd20Sg0sxPsth2qApQbJk9Src0R2jTfc8hvlxnzFNzPkm3EcDf+eA0cMLk5DwbMDqd4PddV+8KA4qCilLH3JOZSd/0FKcIIbZyLE6FaI4SyJH9ifjRjfUkaiNj0T/xI5ZoRv8uEKYGIASLDD8kzFpx3wwueTPk8EqbQhig/fVWQJH53IHkqwWRDIbQ6jUI8fkeLoxtMmNqCZZjDMBPIybmamfNMay0SqabYE=
+  - secure: A12BEab6nt0TX4ZZgjiDoa1Si6gCrc66iMTMEJIjqCxe57Xs/KQB8PFux2GuqCrtba/DPjc7SVMrAYkBNFfNWMh8bZpd6qmSA1dn1JflKZ+JFSd7DqXA/az31v78sTTNKtn4jCRjt23RkO/K1u/qNCeQf5WtoTDjTcqRcnUIz922vlS/h0Pq1Pa4rpGQ1Y2fY/t4tIXytU81M/MHGwaG9tvktlv8Hlyf5FwztE2glLhUO/p0ltWbjlclA88/hEg8Q7fyebIwrWsFOAnsWCgPw2ii0Be0KdF7zhOoLQyBBOPDIPCOkjrVdcmWoha6eCox1Dq61qZQL/in9luYxV2yc9nUbuCIz1ZeZ5uL4f04Ucfd7ewuDP1LilIcSHzeOeoO2U5bcOEn2wnFwVx67BprH9t4eE6p/NlTSi1POqzFVdM0jiYItfitXehqoQwKXTtda/EDJbfkxFy8E0aOl1dyDmWLAh9mN1xGr0e1ZNdkwOS0fruSWNZCWCeraNdM63heddz9KY01cjeLMZxWAXcwJrHKNAYVNvXwTmWcbFp/e+nDP+ong2CkXqBaNurej2FqPxO+fLojH72OTejW9Lwlj7y5ckwedEAsP34Y71EGKiY1mqg+gMw+DvDqzMsUquN1+98bl9Hm4WyRdhL20Q6oZSEWqdrzREGNWx7NLnB11b4=
