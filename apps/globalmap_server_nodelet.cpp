@@ -7,6 +7,7 @@
 #include <tf_conversions/tf_eigen.h>
 #include <tf/transform_broadcaster.h>
 
+#include <std_msgs/String.h>
 #include <sensor_msgs/PointCloud2.h>
 
 #include <nodelet/nodelet.h>
@@ -34,6 +35,8 @@ public:
 
     // publish globalmap with "latched" publisher
     globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
+    map_update_sub = nh.subscribe("/map_request/pcd", 10,              &GlobalmapServerNodelet::map_update_callback, this);
+
     globalmap_pub_timer = nh.createWallTimer(ros::WallDuration(1.0), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
   }
 
@@ -74,6 +77,26 @@ private:
     globalmap_pub.publish(globalmap);
   }
 
+  void map_update_callback(const std_msgs::String &msg){
+    ROS_INFO_STREAM("Received map request, map path : "<< msg.data);
+    std::string globalmap_pcd = msg.data;
+    globalmap.reset(new pcl::PointCloud<PointT>());
+    pcl::io::loadPCDFile(globalmap_pcd, *globalmap);
+    globalmap->header.frame_id = "map";
+
+    // downsample globalmap
+    double downsample_resolution = private_nh.param<double>("downsample_resolution", 0.1);
+    boost::shared_ptr<pcl::VoxelGrid<PointT>> voxelgrid(new pcl::VoxelGrid<PointT>());
+    voxelgrid->setLeafSize(downsample_resolution, downsample_resolution, downsample_resolution);
+    voxelgrid->setInputCloud(globalmap);
+
+    pcl::PointCloud<PointT>::Ptr filtered(new pcl::PointCloud<PointT>());
+    voxelgrid->filter(*filtered);
+
+    globalmap = filtered;
+    globalmap_pub.publish(globalmap);
+  }
+
 private:
   // ROS
   ros::NodeHandle nh;
@@ -81,6 +104,7 @@ private:
   ros::NodeHandle private_nh;
 
   ros::Publisher globalmap_pub;
+  ros::Subscriber map_update_sub;
 
   ros::WallTimer globalmap_pub_timer;
   pcl::PointCloud<PointT>::Ptr globalmap;
