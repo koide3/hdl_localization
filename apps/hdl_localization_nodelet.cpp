@@ -203,9 +203,17 @@ private:
     }
 
     // transform pointcloud into odom_child_frame_id
+    std::string tfError;
     pcl::PointCloud<PointT>::Ptr cloud(new pcl::PointCloud<PointT>());
-    if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
-        NODELET_ERROR("point cloud cannot be transformed into target frame!!");
+    if(this->tf_buffer.canTransform(odom_child_frame_id, pcl_cloud->header.frame_id, stamp, ros::Duration(0.1), &tfError))
+    {
+        if(!pcl_ros::transformPointCloud(odom_child_frame_id, *pcl_cloud, *cloud, this->tf_buffer)) {
+            NODELET_ERROR("point cloud cannot be transformed into target frame!!");
+            return;
+        }
+    }else
+    {
+        NODELET_ERROR(tfError.c_str());
         return;
     }
 
