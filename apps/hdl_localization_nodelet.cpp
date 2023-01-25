@@ -159,7 +159,6 @@ private:
     if(private_nh.param<bool>("specify_init_pose", true)) {
       NODELET_INFO("initialize pose estimator with specified parameters!!");
       pose_estimator.reset(new hdl_localization::PoseEstimator(registration,
-        ros::Time::now(),
         Eigen::Vector3f(private_nh.param<double>("init_pos_x", 0.0), private_nh.param<double>("init_pos_y", 0.0), private_nh.param<double>("init_pos_z", 0.0)),
         Eigen::Quaternionf(private_nh.param<double>("init_ori_w", 1.0), private_nh.param<double>("init_ori_x", 0.0), private_nh.param<double>("init_ori_y", 0.0), private_nh.param<double>("init_ori_z", 0.0)),
         private_nh.param<double>("cool_time_duration", 0.5)
@@ -182,12 +181,6 @@ private:
    * @param points_msg
    */
   void points_callback(const sensor_msgs::PointCloud2ConstPtr& points_msg) {
-    std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
-    if(!pose_estimator) {
-      NODELET_ERROR("waiting for initial pose input!!");
-      return;
-    }
-
     if(!globalmap) {
       NODELET_ERROR("globalmap has not been received!!");
       return;
@@ -224,6 +217,11 @@ private:
       delta_estimater->add_frame(filtered);
     }
 
+    std::lock_guard<std::mutex> estimator_lock(pose_estimator_mutex);
+    if(!pose_estimator) {
+      NODELET_ERROR("waiting for initial pose input!!");
+      return;
+    }
     Eigen::Matrix4f before = pose_estimator->matrix();
 
     // predict
@@ -344,7 +342,6 @@ private:
     std::lock_guard<std::mutex> lock(pose_estimator_mutex);
     pose_estimator.reset(new hdl_localization::PoseEstimator(
       registration,
-      ros::Time::now(),
       pose.translation(),
       Eigen::Quaternionf(pose.linear()),
       private_nh.param<double>("cool_time_duration", 0.5)));
@@ -366,7 +363,6 @@ private:
     pose_estimator.reset(
           new hdl_localization::PoseEstimator(
             registration,
-            ros::Time::now(),
             Eigen::Vector3f(p.x, p.y, p.z),
             Eigen::Quaternionf(q.w, q.x, q.y, q.z),
             private_nh.param<double>("cool_time_duration", 0.5))
