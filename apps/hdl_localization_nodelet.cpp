@@ -451,21 +451,31 @@ private:
     status.header = header;
 
     status.has_converged = registration->hasConverged();
-    status.matching_error = registration->getFitnessScore();
+    status.matching_error = 0.0;
 
-    const double max_correspondence_dist = 0.5;
+    const double max_correspondence_dist = private_nh.param<double>("status_max_correspondence_dist", 0.5);
+    const double max_valid_point_dist = private_nh.param<double>("status_max_valid_point_dist", 25.0);
 
     int num_inliers = 0;
+    int num_valid_points = 0;
     std::vector<int> k_indices;
     std::vector<float> k_sq_dists;
     for(int i = 0; i < aligned->size(); i++) {
       const auto& pt = aligned->at(i);
+      if (pt.getVector3fMap().norm() > max_valid_point_dist) {
+        continue;
+      }
+      num_valid_points++;
+
       registration->getSearchMethodTarget()->nearestKSearch(pt, 1, k_indices, k_sq_dists);
       if(k_sq_dists[0] < max_correspondence_dist * max_correspondence_dist) {
+        status.matching_error += k_sq_dists[0];
         num_inliers++;
       }
     }
-    status.inlier_fraction = static_cast<float>(num_inliers) / aligned->size();
+
+    status.matching_error /= num_inliers;
+    status.inlier_fraction = static_cast<float>(num_inliers) / std::max(1, num_valid_points);
     status.relative_pose = tf2::eigenToTransform(Eigen::Isometry3d(registration->getFinalTransformation().cast<double>())).transform;
 
     status.prediction_labels.reserve(2);
