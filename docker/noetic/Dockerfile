@@ -20,7 +20,7 @@ COPY . /root/catkin_ws/src/hdl_localization/
 WORKDIR /root/catkin_ws/src/hdl_localization
 
 WORKDIR /root/catkin_ws
-RUN /bin/bash -c '. /opt/ros/noetic/setup.bash; catkin_make'
+RUN /bin/bash -c '. /opt/ros/noetic/setup.bash; catkin_make -DCMAKE_BUILD_TYPE=RelWithDebInfo'
 RUN sed -i "6i source \"/root/catkin_ws/devel/setup.bash\"" /ros_entrypoint.sh
 
 WORKDIR /
