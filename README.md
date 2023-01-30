@@ -33,6 +33,13 @@ catkin_make -DCMAKE_BUILD_TYPE=Release
 # catkin_make -DCMAKE_BUILD_TYPE=Release -DBUILD_VGICP_CUDA=ON
 ```
 
+### Support docker :whale:  
+
+Using docker, you can conveniently satisfy the requirement environment.  
+Please refer to the repository below and use the docker easily.  
+
+- [Taeyoung96/hdl_localization_tutorial](https://github.com/Taeyoung96/hdl_localization_tutorial)
+
 ## Parameters
 All configurable parameters are listed in *launch/hdl_localization.launch* as ros params.
 The estimated pose can be reset using using "2D Pose Estimate" on rviz
