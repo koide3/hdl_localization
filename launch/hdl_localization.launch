@@ -5,8 +5,8 @@
   <arg name="points_topic" default="/velodyne_points" />
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
-  <arg name="odom_child_frame_id" default="velodyne" />
-
+  <arg name="odom_child_frame_id" default="os_sensor" />
+  
   <!-- optional arguments -->
   <arg name="use_imu" default="false" />
   <arg name="invert_imu_acc" default="false" />
@@ -51,7 +51,7 @@
       <param name="ndt_neighbor_search_method" value="DIRECT7" />
       <param name="ndt_neighbor_search_radius" value="2.0" />
       <param name="ndt_resolution" value="1.0" />
-      <param name="downsample_resolution" value="0.1" />
+      <param name="downsample_resolution" value="0.20" />
       <!-- if "specify_init_pose" is true, pose estimator will be initialized with the following params -->
       <!-- otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz" -->
       <param name="specify_init_pose" value="true" />
