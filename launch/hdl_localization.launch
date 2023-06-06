@@ -3,6 +3,8 @@
   <!-- arguments -->
   <arg name="nodelet_manager" default="nodelet_manager" />
   <arg name="points_topic" default="/os_cloud_node/points" />
+  <arg name="downsample_resolution" default="0.2" />
+  <arg name="globalmap_pcd" default="$(find hdl_localization)/data/map.pcd" />
   <!-- input clouds are transformed in odom_child_frame, and then localization is performed in that frame -->
   <!-- this is useful to match the LIDAR and IMU coodinate systems -->
   <arg name="odom_child_frame_id" default="os_sensor" />
@@ -24,9 +26,9 @@
 
     <!-- globalmap_server_nodelet -->
     <node pkg="nodelet" type="nodelet" name="globalmap_server_nodelet" args="load hdl_localization/GlobalmapServerNodelet $(arg nodelet_manager)">
-      <param name="globalmap_pcd" value="$(find hdl_localization)/data/map.pcd" />
+      <param name="globalmap_pcd" value="$(arg globalmap_pcd)" />
       <param name="convert_utm_to_local" value="true" />
-      <param name="downsample_resolution" value="0.1" />
+      <param name="downsample_resolution" value="$(arg downsample_resolution)" />
     </node>
 
     <!-- hdl_localization_nodelet -->
