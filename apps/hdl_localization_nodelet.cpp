@@ -61,12 +61,12 @@ public:
       imu_sub = mt_nh.subscribe("/gpsimu_driver/imu_data", 256, &HdlLocalizationNodelet::imu_callback, this);
     }
     points_sub = mt_nh.subscribe("/velodyne_points", 5, &HdlLocalizationNodelet::points_callback, this);
-    globalmap_sub = nh.subscribe("/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
-    initialpose_sub = nh.subscribe("/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
+    globalmap_sub = nh.subscribe("/ndt/globalmap", 1, &HdlLocalizationNodelet::globalmap_callback, this);
+    initialpose_sub = nh.subscribe("/ndt/initialpose", 8, &HdlLocalizationNodelet::initialpose_callback, this);
 
-    pose_pub = nh.advertise<nav_msgs::Odometry>("/odom", 5, false);
-    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/aligned_points", 5, false);
-    status_pub = nh.advertise<ScanMatchingStatus>("/status", 5, false);
+    pose_pub = nh.advertise<nav_msgs::Odometry>("/ndt/odom", 5, false);
+    aligned_pub = nh.advertise<sensor_msgs::PointCloud2>("/ndt/aligned_points", 5, false);
+    status_pub = nh.advertise<ScanMatchingStatus>("/ndt/status", 5, false);
 
     // global localization
     use_global_localization = private_nh.param<bool>("use_global_localization", true);

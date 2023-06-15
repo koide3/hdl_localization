@@ -33,8 +33,8 @@ public:
     initialize_params();
 
     // publish globalmap with "latched" publisher
-    globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/globalmap", 5, true);
-    map_update_sub = nh.subscribe("/map_request/pcd", 10,              &GlobalmapServerNodelet::map_update_callback, this);
+    globalmap_pub = nh.advertise<sensor_msgs::PointCloud2>("/ndt/globalmap", 5, true);
+    map_update_sub = nh.subscribe("/ndt/map_request/pcd", 10,              &GlobalmapServerNodelet::map_update_callback, this);
 
     globalmap_pub_timer = nh.createWallTimer(ros::WallDuration(1.0), &GlobalmapServerNodelet::pub_once_cb, this, true, true);
   }

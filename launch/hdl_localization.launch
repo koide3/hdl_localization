@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <launch>
   <!-- arguments -->
-  <arg name="nodelet_manager" default="nodelet_manager" />
+  <arg name="nodelet_manager" default="ndt_nodelet_manager" />
   <arg name="points_topic" default="/os_cloud_node/points" />
   <arg name="downsample_resolution" default="0.2" />
   <arg name="globalmap_pcd" default="$(find hdl_localization)/data/map.pcd" />
@@ -13,10 +13,10 @@
   <arg name="use_imu" default="false" />
   <arg name="invert_imu_acc" default="false" />
   <arg name="invert_imu_gyro" default="false" />
-  <arg name="use_global_localization" default="true" />
+  <arg name="use_global_localization" default="false" />
   <arg name="imu_topic" default="/imu/data" />
   <arg name="enable_robot_odometry_prediction" value="false" />
-  <arg name="robot_odom_frame_id" value="odom" />
+  <arg name="robot_odom_frame_id" value="ndt_odom" />
   <arg name="plot_estimation_errors" value="false" />
 
   <include file="$(find hdl_global_localization)/launch/hdl_global_localization.launch" if="$(arg use_global_localization)" />
