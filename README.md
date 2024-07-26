@@ -1,3 +1,8 @@
+# New packages arrived
+
+We released a new open source 3D mapping framework [GLIM](https://github.com/koide3/glim).  
+We also developed a map-based localization system [GLIL](https://koide3.github.io/glil_pubdoc/) as closed source.
+
 # hdl_localization
 ***hdl_localization*** is a ROS package for real-time 3D localization using a 3D LIDAR, such as velodyne HDL32e and VLP16. This package performs Unscented Kalman Filter-based pose estimation. It first estimates the sensor pose from IMU data implemented on the LIDAR, and then performs multi-threaded NDT scan matching between a globalmap point cloud and input point clouds to correct the estimated pose. IMU-based pose prediction is optional. If you disable it, the system uses the constant velocity model without IMU information.
 
