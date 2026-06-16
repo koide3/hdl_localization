@@ -67,8 +67,11 @@ public:
       RCLCPP_INFO(this->get_logger(), "enable imu-based prediction");
       imu_sub = this->create_subscription<sensor_msgs::msg::Imu>("/gpsimu_driver/imu_data", 256, std::bind(&HdlLocalization::imu_callback, this, _1));
     }
-    points_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/velodyne_points", 5, std::bind(&HdlLocalization::points_callback, this, _1));
-    globalmap_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/globalmap", 1, std::bind(&HdlLocalization::globalmap_callback, this, _1));
+    points_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/velodyne_points", rclcpp::SensorDataQoS(), std::bind(&HdlLocalization::points_callback, this, _1));
+    rclcpp::QoS map_qos(1);
+    map_qos.transient_local();
+    map_qos.reliable();
+    globalmap_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("/globalmap", map_qos, std::bind(&HdlLocalization::globalmap_callback, this, _1));
     initialpose_sub = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>("/initialpose", 8, std::bind(&HdlLocalization::initialpose_callback, this, _1));
 
     pose_pub = this->create_publisher<nav_msgs::msg::Odometry>("/odom", 5);

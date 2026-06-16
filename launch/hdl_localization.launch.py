@@ -71,14 +71,13 @@ def generate_launch_description():
                 name=component_manager,
                 namespace="",
                 package="rclcpp_components",
-                executable="component_container",
+                executable="component_container_mt",
                 composable_node_descriptions=[
                     ComposableNode(
                         package="hdl_localization",
                         plugin="hdl_localization::GlobalmapServer",
                         name="global_map_server",
                         parameters=[params_file, {"globalmap_pcd": globalmap_pcd}],
-                        extra_arguments=[{"use_intra_process_comms": True}],
                     ),
                     ComposableNode(
                         package="hdl_localization",
@@ -92,7 +91,6 @@ def generate_launch_description():
                             params_file,
                             {"use_global_localization": use_global_localization},
                         ],
-                        extra_arguments=[{"use_intra_process_comms": True}],
                     ),
                 ],
             ),

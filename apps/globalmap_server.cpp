@@ -27,7 +27,10 @@ public:
     initialize_params();
 
     // publish globalmap with "latched" publisher
-    globalmap_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("/globalmap", 5);
+    rclcpp::QoS map_qos(1);
+    map_qos.transient_local();
+    map_qos.reliable();
+    globalmap_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("/globalmap", map_qos);
     map_update_sub = this->create_subscription<std_msgs::msg::String>("/map_request/pcd", 10, std::bind(&GlobalmapServer::map_update_callback, this, _1));
 
     globalmap_pub_timer = this->create_wall_timer(1s, std::bind(&GlobalmapServer::pub_once_cb, this));
