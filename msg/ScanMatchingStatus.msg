@@ -1,4 +1,4 @@
-Header header
+std_msgs/Header header
 
 bool has_converged
 float32 matching_error

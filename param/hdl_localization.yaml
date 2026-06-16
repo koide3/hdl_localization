@@ -1,0 +1,32 @@
+hdl_localization:
+  ros__parameters:
+    # input clouds are transformed in odom_child_frame, and then localization is performed in that frame.
+    # this is useful to match the LIDAR and IMU coodinate systems.
+    odom_child_frame_id: velodyne
+    use_imu: false
+    invert_imu_acc: false
+    invert_imu_gyro: false
+    enable_robot_odometry_prediction: false
+    robot_odom_frame_id: odom
+    cool_time_duration: 2.0 # during "cool_time", imu inputs are ignored
+    reg_method: NDT_OMP # ndt settings. available reg_methods: NDT_OMP, NDT_CUDA_P2D, NDT_CUDA_D2D
+    # if NDT is slow for your PC, try DIRECT1 serach method, which is a bit unstable but extremely fast.
+    ndt_neighbor_search_method: DIRECT7
+    ndt_neighbor_search_radius: 2.0
+    ndt_resolution: 1.0
+    downsample_resolution: 0.1
+    # if "specify_init_pose" is true, pose estimator will be initialized with the following params.
+    # otherwise, you need to input an initial pose with "2D Pose Estimate" on rviz"
+    specify_init_pose: true
+    init_pos_x: 0.0
+    init_pos_y: 0.0
+    init_pos_z: 0.0
+    init_ori_w: 1.0
+    init_ori_x: 0.0
+    init_ori_y: 0.0
+    init_ori_z: 0.0
+
+global_map_server:
+  ros__parameters:
+    convert_utm_to_local: true
+    downsample_resolution: 0.1

@@ -52,17 +52,17 @@ PoseEstimator::~PoseEstimator() {}
  * @param acc      acceleration
  * @param gyro     angular velocity
  */
-void PoseEstimator::predict(const ros::Time& stamp) {
-  if (init_stamp.is_zero()) {
+void PoseEstimator::predict(const rclcpp::Time& stamp) {
+  if (init_stamp.nanoseconds() == 0) {
     init_stamp = stamp;
   }
 
-  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
+  if ((stamp - init_stamp).seconds() < cool_time_duration || prev_stamp.nanoseconds() == 0 || prev_stamp == stamp) {
     prev_stamp = stamp;
     return;
   }
 
-  double dt = (stamp - prev_stamp).toSec();
+  double dt = (stamp - prev_stamp).seconds();
   prev_stamp = stamp;
 
   ukf->setProcessNoiseCov(process_noise * dt);
@@ -77,17 +77,17 @@ void PoseEstimator::predict(const ros::Time& stamp) {
  * @param acc      acceleration
  * @param gyro     angular velocity
  */
-void PoseEstimator::predict(const ros::Time& stamp, const Eigen::Vector3f& acc, const Eigen::Vector3f& gyro) {
-  if (init_stamp.is_zero()) {
+void PoseEstimator::predict(const rclcpp::Time& stamp, const Eigen::Vector3f& acc, const Eigen::Vector3f& gyro) {
+  if (init_stamp.nanoseconds() == 0) {
     init_stamp = stamp;
   }
 
-  if ((stamp - init_stamp).toSec() < cool_time_duration || prev_stamp.is_zero() || prev_stamp == stamp) {
+  if ((stamp - init_stamp).seconds() < cool_time_duration || prev_stamp.nanoseconds() == 0 || prev_stamp == stamp) {
     prev_stamp = stamp;
     return;
   }
 
-  double dt = (stamp - prev_stamp).toSec();
+  double dt = (stamp - prev_stamp).seconds();
   prev_stamp = stamp;
 
   ukf->setProcessNoiseCov(process_noise * dt);
@@ -140,8 +140,8 @@ void PoseEstimator::predict_odom(const Eigen::Matrix4f& odom_delta) {
  * @param cloud   input cloud
  * @return cloud aligned to the globalmap
  */
-pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud) {
-  if (init_stamp.is_zero()) {
+pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const rclcpp::Time& stamp, const pcl::PointCloud<PointT>::ConstPtr& cloud) {
+  if (init_stamp.nanoseconds() == 0) {
     init_stamp = stamp;
   }
 
@@ -220,7 +220,7 @@ pcl::PointCloud<PoseEstimator::PointT>::Ptr PoseEstimator::correct(const ros::Ti
 }
 
 /* getters */
-ros::Time PoseEstimator::last_correction_time() const {
+rclcpp::Time PoseEstimator::last_correction_time() const {
   return last_correction_stamp;
 }
 
